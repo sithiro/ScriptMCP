@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "ScriptMCP.Console/**"
+      - "ScriptMCP.Library/**"
+      - "ScriptMcp.Server/**"
 
 permissions:
   contents: write
