@@ -448,7 +448,7 @@ public class DynamicTools
         var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
 
         // Gather references from the runtime directory
-        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+        var runtimeDir = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
         var references = new List<MetadataReference>();
 
         // Core references
