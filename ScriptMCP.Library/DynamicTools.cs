@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Reflection;
+using System.Reflection.Metadata;
 using System.Runtime.Loader;
 using System.Text;
 using System.Text.Json;
@@ -447,48 +448,7 @@ public class DynamicTools
 
         var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
 
-        // Gather references from the runtime directory
-        // In self-contained single-file publishes, Assembly.Location can be empty.
-        // Fall back to AppContext.BaseDirectory which points to the extraction/publish directory.
-        var asmLocation = typeof(object).Assembly.Location;
-        var runtimeDir = !string.IsNullOrEmpty(asmLocation)
-            ? Path.GetDirectoryName(asmLocation)!
-            : AppContext.BaseDirectory;
-        var references = new List<MetadataReference>();
-
-        // Core references
-        var coreAssemblies = new[]
-        {
-            "System.Runtime.dll",
-            "System.Collections.dll",
-            "System.Linq.dll",
-            "System.Console.dll",
-            "System.Text.RegularExpressions.dll",
-            "System.ComponentModel.Primitives.dll",
-            "System.Private.CoreLib.dll",
-            "System.Private.Uri.dll",
-            "netstandard.dll",
-        };
-
-        foreach (var asm in coreAssemblies)
-        {
-            var path = Path.Combine(runtimeDir, asm);
-            if (File.Exists(path))
-                references.Add(MetadataReference.CreateFromFile(path));
-        }
-
-        // Add all System.Net.* and System.* assemblies for broad compatibility
-        foreach (var dllPath in Directory.GetFiles(runtimeDir, "System.*.dll"))
-        {
-            try
-            {
-                AssemblyName.GetAssemblyName(dllPath);
-                var mref = MetadataReference.CreateFromFile(dllPath);
-                if (!references.Any(r => ((PortableExecutableReference)r).FilePath == dllPath))
-                    references.Add(mref);
-            }
-            catch { /* skip native DLLs */ }
-        }
+        var references = GatherMetadataReferences();
 
         var compilation = CSharpCompilation.Create(
             assemblyName: $"DynFunc_{func.Name}_{Guid.NewGuid():N}",
@@ -509,6 +469,85 @@ public class DynamicTools
         }
 
         return (peStream.ToArray(), null);
+    }
+
+    /// <summary>
+    /// Resolves MetadataReferences for Roslyn compilation.
+    /// Strategy 1 (dotnet run / normal exe): load from DLL files on disk via typeof(object).Assembly.Location.
+    /// Strategy 2 (single-file publish): Assembly.Location is empty and DLLs are bundled in the exe,
+    ///   so we read raw metadata directly from loaded assemblies in memory.
+    /// </summary>
+    private static List<MetadataReference> GatherMetadataReferences()
+    {
+        var references = new List<MetadataReference>();
+
+        // Strategy 1: File-based — works for dotnet run and non-single-file publishes
+        // IL3000: We intentionally check Assembly.Location and handle the empty case in Strategy 2.
+#pragma warning disable IL3000
+        var asmLocation = typeof(object).Assembly.Location;
+#pragma warning restore IL3000
+        if (!string.IsNullOrEmpty(asmLocation))
+        {
+            var runtimeDir = Path.GetDirectoryName(asmLocation)!;
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Core references
+            foreach (var name in new[]
+            {
+                "System.Runtime.dll",
+                "System.Collections.dll",
+                "System.Linq.dll",
+                "System.Console.dll",
+                "System.Text.RegularExpressions.dll",
+                "System.ComponentModel.Primitives.dll",
+                "System.Private.CoreLib.dll",
+                "System.Private.Uri.dll",
+                "netstandard.dll",
+            })
+            {
+                var path = Path.Combine(runtimeDir, name);
+                if (File.Exists(path) && seen.Add(path))
+                    references.Add(MetadataReference.CreateFromFile(path));
+            }
+
+            // Add all System.* assemblies for broad compatibility
+            foreach (var dllPath in Directory.GetFiles(runtimeDir, "System.*.dll"))
+            {
+                if (!seen.Add(dllPath)) continue;
+                try
+                {
+                    AssemblyName.GetAssemblyName(dllPath);
+                    references.Add(MetadataReference.CreateFromFile(dllPath));
+                }
+                catch { /* skip native DLLs */ }
+            }
+
+            return references;
+        }
+
+        // Strategy 2: In-memory — works for self-contained single-file publishes
+        // Assembly.Location is empty, DLLs are bundled inside the exe.
+        // Use TryGetRawMetadata to read metadata directly from loaded assemblies.
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (asm.IsDynamic) continue;
+
+            try
+            {
+                unsafe
+                {
+                    if (asm.TryGetRawMetadata(out byte* blob, out int length))
+                    {
+                        var moduleMetadata = ModuleMetadata.CreateFromMetadata((IntPtr)blob, length);
+                        var assemblyMetadata = AssemblyMetadata.Create(moduleMetadata);
+                        references.Add(assemblyMetadata.GetReference(display: asm.FullName));
+                    }
+                }
+            }
+            catch { /* skip assemblies that can't provide metadata */ }
+        }
+
+        return references;
     }
 
     // ── Execution ─────────────────────────────────────────────────────────────
