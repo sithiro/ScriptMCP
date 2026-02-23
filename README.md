@@ -23,7 +23,7 @@ ScriptMCP.Console is published as a self-contained, single-file executable for:
 Use the `claude mcp add` command to register ScriptMCP as a user-level MCP server:
 
 ```bash
-claude mcp add -s user -t stdio scriptmcp -- "C:\Tools\ScriptMCP 1.0.4\scriptmcp.exe"
+claude mcp add -s user -t stdio scriptmcp -- "C:\Tools\ScriptMCP 1.0.7\scriptmcp.exe"
 ```
 
 macOS/Linux:
@@ -49,7 +49,7 @@ Alternatively, create a `.mcp.json` in your project directory:
   "mcpServers": {
     "scriptmcp": {
       "type": "stdio",
-      "command": "C:\\Tools\\ScriptMCP 1.0.4\\scriptmcp.exe",
+      "command": "C:\\Tools\\ScriptMCP 1.0.7\\scriptmcp.exe",
       "args": []
     }
   }
@@ -63,7 +63,7 @@ macOS/Linux example:
   "mcpServers": {
     "scriptmcp": {
       "type": "stdio",
-      "command": "/opt/ScriptMCP 1.0.4/scriptmcp",
+      "command": "/opt/ScriptMCP 1.0.7/scriptmcp",
       "args": []
     }
   }
