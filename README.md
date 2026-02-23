@@ -1,5 +1,7 @@
 # ScriptMCP
 
+![ScriptMCP in Claude Code](snapshot1.png)
+
 ## Prebuilt Console App
 
 ScriptMCP.Console is published as a self-contained, single-file executable for:
