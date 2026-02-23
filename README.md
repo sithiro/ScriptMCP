@@ -230,11 +230,4 @@ Functions are persisted in a SQLite database created on first run:
 
 ## Scripting Environment
 
-- **.NET 9 / C# 13** runtime
-- Code is placed inside: `public static string Run(Dictionary<string, string> args)` — write only the method body
-- Must return a `string`
-- Auto-included namespaces: `System`, `System.Collections.Generic`, `System.Globalization`, `System.IO`, `System.Linq`, `System.Net`, `System.Net.Http`, `System.Text`, `System.Text.RegularExpressions`, `System.Threading.Tasks`
-- For other namespaces, use fully qualified names (e.g. `System.Diagnostics.Process.Start(...)`)
-- Supported parameter types: `string`, `int`, `long`, `double`, `float`, `bool`
-- Use `System.Text.Json` for JSON, `HttpClient` for HTTP, `System.Diagnostics.Process` for shell commands
-- The method is **not async** — use `.Result` or `.GetAwaiter().GetResult()` for async calls
+- **.NET 9 / C# 13** runtime — no .NET installation required, the executable is self-contained
