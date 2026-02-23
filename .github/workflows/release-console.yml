@@ -26,22 +26,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          # If this commit already has a ScriptMCP-v* tag, reuse it.
-          existing_tag="$(git tag --points-at HEAD | grep -E '^ScriptMCP-v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          # If this commit already has a scriptmcp-v* tag, reuse it.
+          existing_tag="$(git tag --points-at HEAD | grep -E '^scriptmcp-v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
           if [[ -n "$existing_tag" ]]; then
             echo "tag=$existing_tag" >> "$GITHUB_OUTPUT"
-            echo "version=${existing_tag#ScriptMCP-v}" >> "$GITHUB_OUTPUT"
+            echo "version=${existing_tag#scriptmcp-v}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Find latest ScriptMCP-v* tag, default to 1.0.0 if none exists.
-          latest_tag="$(git tag --list 'ScriptMCP-v*' --sort=-v:refname | head -n 1 || true)"
+          # Find latest scriptmcp-v* tag, default to 1.0.0 if none exists.
+          latest_tag="$(git tag --list 'scriptmcp-v*' --sort=-v:refname | head -n 1 || true)"
           if [[ -z "$latest_tag" ]]; then
             major=1
             minor=0
             patch=0
           else
-            version="${latest_tag#ScriptMCP-v}"
+            version="${latest_tag#scriptmcp-v}"
             IFS='.' read -r major minor patch <<< "$version"
           fi
 
@@ -53,7 +53,7 @@ jobs:
           fi
 
           next_version="${major}.${minor}.${patch}"
-          next_tag="ScriptMCP-v${next_version}"
+          next_tag="scriptmcp-v${next_version}"
           echo "tag=$next_tag" >> "$GITHUB_OUTPUT"
           echo "version=$next_version" >> "$GITHUB_OUTPUT"
 
@@ -62,9 +62,22 @@ jobs:
           git tag "$next_tag"
           git push origin "$next_tag"
 
-  publish:
+  create-release:
     runs-on: ubuntu-latest
     needs: version
+    steps:
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ needs.version.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            --title "ScriptMCP ${{ needs.version.outputs.version }}" \
+            --generate-notes
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: [version, create-release]
     strategy:
       fail-fast: false
       matrix:
@@ -107,9 +120,11 @@ jobs:
           cd artifacts
           zip -r scriptmcp-${{ matrix.rid }}.zip ScriptMCP.Console-${{ matrix.rid }}
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.version.outputs.tag }}
-          name: ScriptMCP ${{ needs.version.outputs.version }}
-          files: artifacts/scriptmcp-${{ matrix.rid }}.zip
+      - name: Upload Asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ needs.version.outputs.tag }}" \
+            "artifacts/scriptmcp-${{ matrix.rid }}.zip" \
+            --repo "${{ github.repository }}" \
+            --clobber
