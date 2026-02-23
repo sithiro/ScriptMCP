@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36930.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScriptMcp.Server", "ScriptMcp.Server\ScriptMcp.Server.csproj", "{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScriptMCP.Console", "ScriptMCP.Console\ScriptMCP.Console.csproj", "{0F22F4FE-3899-4BCF-B6CB-EF7C0F542376}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScriptMCP.Library", "ScriptMCP.Library\ScriptMCP.Library.csproj", "{B6250B6C-771E-4C60-8B11-1B70C6AEAFCF}"
@@ -19,18 +17,6 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Debug|x64.Build.0 = Debug|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Debug|x86.Build.0 = Debug|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Release|Any CPU.Build.0 = Release|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Release|x64.ActiveCfg = Release|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Release|x64.Build.0 = Release|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Release|x86.ActiveCfg = Release|Any CPU
-		{0A7C36D9-5D72-9FDF-9D01-3B8486FFE1B5}.Release|x86.Build.0 = Release|Any CPU
 		{0F22F4FE-3899-4BCF-B6CB-EF7C0F542376}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0F22F4FE-3899-4BCF-B6CB-EF7C0F542376}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0F22F4FE-3899-4BCF-B6CB-EF7C0F542376}.Debug|x64.ActiveCfg = Debug|Any CPU
