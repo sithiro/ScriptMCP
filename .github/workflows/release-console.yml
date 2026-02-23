@@ -7,7 +7,7 @@ on:
     paths:
       - "ScriptMCP.Console/**"
       - "ScriptMCP.Library/**"
-      - "ScriptMcp.Server/**"
+      - ".github/workflows/release-console.yml"
 
 permissions:
   contents: write
