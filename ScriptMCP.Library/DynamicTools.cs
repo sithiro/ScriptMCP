@@ -448,7 +448,12 @@ public class DynamicTools
         var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
 
         // Gather references from the runtime directory
-        var runtimeDir = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
+        // In self-contained single-file publishes, Assembly.Location can be empty.
+        // Fall back to AppContext.BaseDirectory which points to the extraction/publish directory.
+        var asmLocation = typeof(object).Assembly.Location;
+        var runtimeDir = !string.IsNullOrEmpty(asmLocation)
+            ? Path.GetDirectoryName(asmLocation)!
+            : AppContext.BaseDirectory;
         var references = new List<MetadataReference>();
 
         // Core references
