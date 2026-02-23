@@ -111,13 +111,8 @@ jobs:
             -p:PublishTrimmed=false \
             -o "artifacts/$FOLDER"
 
-          # Rename the published executable to scriptmcp(.exe)
-          if [[ "${{ matrix.rid }}" == win-* ]]; then
-            mv "artifacts/$FOLDER/ScriptMCP.Console.exe" \
-               "artifacts/$FOLDER/scriptmcp.exe"
-          else
-            mv "artifacts/$FOLDER/ScriptMCP.Console" \
-               "artifacts/$FOLDER/scriptmcp"
+          # Ensure executable permission on non-Windows (AssemblyName already produces 'scriptmcp')
+          if [[ "${{ matrix.rid }}" != win-* ]]; then
             chmod +x "artifacts/$FOLDER/scriptmcp"
           fi
 
