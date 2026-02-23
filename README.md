@@ -32,6 +32,12 @@ claude mcp add -s user scriptmcp -- /opt/ScriptMCP\ 1.0.4/scriptmcp
 
 The `-s user` flag makes ScriptMCP available across all your projects. To scope it to a single project, use `-s project` instead.
 
+To remove it:
+
+```bash
+claude mcp remove -s user scriptmcp
+```
+
 #### Via .mcp.json
 
 Alternatively, create a `.mcp.json` in your project directory:
