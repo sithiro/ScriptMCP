@@ -20,10 +20,10 @@ ScriptMCP exposes 7 MCP tools that together form a self-extending toolbox:
 
 ### How It Works
 
-1. **Register** a function with C# code or plain English instructions
-2. **Call** it via `call_dynamic_function` (in-process) or `call_dynamic_process` (out-of-process)
-3. Functions are **compiled via Roslyn** on registration and **persisted to SQLite** — they survive server restarts
-4. The AI agent discovers functions automatically via `list_dynamic_functions` at the start of each conversation
+1. **Register** — the AI agent writes and registers C# functions or plain English instructions on your behalf (or you provide explicit code)
+2. **Execute** — functions are invoked automatically by the AI via `call_dynamic_function` (in-process) or `call_dynamic_process` (out-of-process)
+3. **Persist** — functions are **compiled via Roslyn** on registration and **stored in SQLite** — they survive server restarts
+4. **Discover** — the AI agent discovers available functions via `list_dynamic_functions` at the start of each conversation
 
 ### Function Types
 
@@ -43,58 +43,55 @@ Functions can include optional **output instructions** that tell the AI how to f
 
 ## Examples
 
-### Get the current time
+### Let the AI create a function for you
 
-Register a simple function:
-
-```
-> register get_time as code: return DateTime.Now.ToString(“hh:mm:ss tt”);
-```
-
-Call it:
+Just describe what you need in natural language — the AI writes the C# code, registers it, and calls it:
 
 ```
-> call get_time
-10:07:39 pm
+You:    create a function that returns the current time, nothing else
+Agent:  [registers get_time → return DateTime.Now.ToString(“hh:mm:ss tt”);]
+
+You:    what time is it?
+Agent:  10:07:39 pm
 ```
 
-### Get a stock price
+### Or provide explicit code
 
-Register a function with parameters:
-
-```csharp
-// name: get_stock_price
-// parameters: [{“name”:”symbol”,”type”:”string”,”description”:”Stock ticker symbol”}]
-var client = new HttpClient();
-client.DefaultRequestHeaders.Add(“User-Agent”, “Mozilla/5.0”);
-var csv = client.GetStringAsync($”https://stooq.com/q/l/?s={symbol.ToLower()}.us&f=sd2t2ohlcv&h&e=csv”)
-    .GetAwaiter().GetResult();
-// ... parse CSV, calculate change, return formatted string
-```
+If you prefer full control, you can dictate the exact implementation:
 
 ```
-> get stock price for AAPL
-AAPL: $266.86 (+3.37, +1.28%)
+You:    register a code function called get_time with body: return DateTime.Now.ToString(“hh:mm:ss tt”);
+Agent:  [registers get_time with your exact code]
+
+You:    what time is it?
+Agent:  10:07:39 pm
+```
+
+### Stock prices
+
+```
+You:    create a function that gets the current stock price for a given ticker symbol
+Agent:  [registers get_stock_price with a symbol parameter, fetches from a financial API]
+
+You:    what's the price of AAPL?
+Agent:  AAPL: $266.86 (+3.37, +1.28%)
 ```
 
 ### Parallel market overview
 
-`market_fast` demonstrates out-of-process composition — it spawns three subprocesses in parallel:
+Once you have individual functions, you can compose them. `market_fast` spawns three subprocesses in parallel:
 
 ```
-> run market_fast
+You:    create a function that gets NASDAQ and Dow Jones top gainers in parallel
+Agent:  [registers market_fast — spawns get_top_nasdaq_stocks and get_top_dow_stocks
+         as parallel subprocesses, then fetches company names]
+
+You:    run market_fast
 ```
-
-Phase 1 (parallel):
-- `scriptmcp.exe --exec get_top_nasdaq_stocks`
-- `scriptmcp.exe --exec get_top_dow_stocks`
-
-Phase 2:
-- `scriptmcp.exe --exec get_company_names` (resolves Dow ticker symbols to company names)
 
 Result (formatted per output instructions as markdown tables):
 
-### NASDAQ-100: $22,592.15
+#### NASDAQ-100: $22,592.15
 
 | Ticker | Company | Price | Change |
 |--------|---------|------:|-------:|
@@ -104,7 +101,7 @@ Result (formatted per output instructions as markdown tables):
 | ASML | ASML Holding N.V. | $1,474.58 | +0.34% |
 | COST | Costco Wholesale | $986.60 | +0.14% |
 
-### Dow Jones: $48,811.70
+#### Dow Jones: $48,811.70
 
 | Ticker | Company | Price | Change |
 |--------|---------|------:|-------:|
@@ -114,33 +111,27 @@ Result (formatted per output instructions as markdown tables):
 | MCD | McDonald's Corporation | $334.83 | +1.39% |
 | AAPL | Apple Inc. | $266.68 | +1.21% |
 
-### Instructions-type function
+### Instructions-type functions
 
-`find_stock_symbol` is a plain English function that orchestrates multiple tools:
-
-```
-> find the stock symbol for “that electric car company elon runs”
-```
-
-The AI reads the instructions, calls `yahoo_symbol_search`, and returns:
+Not everything needs code. Plain English instructions let the AI orchestrate multi-step workflows:
 
 ```
-TSLA — Tesla, Inc. (NASDAQ)
+You:    find the stock ticker for “that electric car company elon runs”
+Agent:  [calls find_stock_symbol → reads instructions → searches Yahoo Finance]
+        TSLA — Tesla, Inc. (NASDAQ)
 ```
 
 ### Output instructions
 
-Add formatting hints when registering a function:
+Control how results are presented:
 
 ```
-> register get_time with outputInstructions: “Display the time inside an ASCII box”
-```
+You:    add output instructions to get_time: “Display the time inside an ASCII box”
 
-```
-> what time is it?
-┌──────────────┐
-│  10:40:00 pm │
-└──────────────┘
+You:    what time is it?
+Agent:  ┌──────────────┐
+        │  10:40:00 pm │
+        └──────────────┘
 ```
 
 ## Install
