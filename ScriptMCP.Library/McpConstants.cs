@@ -31,7 +31,11 @@ public static class McpConstants
         "Use System.Text.Json for JSON. Use System.Net.Http.HttpClient for HTTP. Use System.Diagnostics.Process for shell commands. " +
         "The method is NOT async — use .Result or .GetAwaiter().GetResult() for async calls. " +
         "Supported parameter types: string (default), int, long, double, float, bool. " +
-        "Parameters are auto-parsed from the args dictionary and available as local variables in your code.";
+        "Parameters are auto-parsed from the args dictionary and available as local variables in your code. " +
+        "OUTPUT INSTRUCTIONS: After calling call_dynamic_function or call_dynamic_process, check the result for " +
+        "a trailing '[Output Instructions]: ...' section. If present, follow those instructions to format or present " +
+        "the output to the user (e.g. render as a table, summarize, highlight key values). " +
+        "Do NOT show the '[Output Instructions]' line itself to the user — only apply the instructions to the output above it.";
 
     /// <summary>
     /// Resolves DynamicTools.SavePath to %LOCALAPPDATA%\ScriptMCP\tools.db,

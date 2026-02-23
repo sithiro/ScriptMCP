@@ -23,11 +23,12 @@ public class DynParam
 
 public class DynamicFunction
 {
-    [JsonPropertyName("Name")]         public string        Name         { get; set; } = "";
-    [JsonPropertyName("Description")]  public string        Description  { get; set; } = "";
-    [JsonPropertyName("Parameters")]   public List<DynParam> Parameters  { get; set; } = new();
-    [JsonPropertyName("FunctionType")] public string        FunctionType { get; set; } = "code";
-    [JsonPropertyName("Body")]         public string        Body         { get; set; } = "";
+    [JsonPropertyName("Name")]                public string        Name                { get; set; } = "";
+    [JsonPropertyName("Description")]         public string        Description         { get; set; } = "";
+    [JsonPropertyName("Parameters")]          public List<DynParam> Parameters         { get; set; } = new();
+    [JsonPropertyName("FunctionType")]        public string        FunctionType        { get; set; } = "code";
+    [JsonPropertyName("Body")]                public string        Body                { get; set; } = "";
+    [JsonPropertyName("OutputInstructions")]  public string?       OutputInstructions  { get; set; }
 }
 
 // ── DynamicTools ──────────────────────────────────────────────────────────────
@@ -65,6 +66,37 @@ public class DynamicTools
 
             EnsureDatabase();
             MigrateFromJson();
+            PreloadAssemblies();
+        }
+    }
+
+    /// <summary>
+    /// Explicitly load key assemblies into the AppDomain so Roslyn can resolve
+    /// forwarded types in single-file publish mode (Strategy 2).
+    /// </summary>
+    private static void PreloadAssemblies()
+    {
+        // Touch types to load their declaring assemblies
+        _ = typeof(System.Net.Http.HttpClient);
+        _ = typeof(System.Net.HttpStatusCode);
+        _ = typeof(System.Text.Json.JsonDocument);
+        _ = typeof(System.Text.RegularExpressions.Regex);
+        _ = typeof(System.Diagnostics.Process);
+        _ = typeof(System.Globalization.CultureInfo);
+
+        // Explicitly load forwarding assemblies that Roslyn needs for type resolution
+        foreach (var name in new[]
+        {
+            "System.Net.Http",
+            "System.Net.Primitives",
+            "System.Text.Json",
+            "System.Diagnostics.Process",
+            "System.Collections",
+            "System.Linq",
+            "System.Runtime",
+        })
+        {
+            try { Assembly.Load(name); } catch { }
         }
     }
 
@@ -80,14 +112,34 @@ public class DynamicTools
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             CREATE TABLE IF NOT EXISTS functions (
-                name              TEXT PRIMARY KEY COLLATE NOCASE,
-                description       TEXT NOT NULL,
-                parameters        TEXT NOT NULL,
-                function_type     TEXT NOT NULL DEFAULT 'code',
-                body              TEXT NOT NULL,
-                compiled_assembly BLOB
+                name                TEXT PRIMARY KEY COLLATE NOCASE,
+                description         TEXT NOT NULL,
+                parameters          TEXT NOT NULL,
+                function_type       TEXT NOT NULL DEFAULT 'code',
+                body                TEXT NOT NULL,
+                compiled_assembly   BLOB,
+                output_instructions TEXT
             );";
         cmd.ExecuteNonQuery();
+
+        // Migrate: add output_instructions column if missing (existing DBs)
+        using var pragma = conn.CreateCommand();
+        pragma.CommandText = "PRAGMA table_info(functions)";
+        bool hasOutputInstructions = false;
+        using (var reader = pragma.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), "output_instructions", StringComparison.OrdinalIgnoreCase))
+                { hasOutputInstructions = true; break; }
+            }
+        }
+        if (!hasOutputInstructions)
+        {
+            using var alter = conn.CreateCommand();
+            alter.CommandText = "ALTER TABLE functions ADD COLUMN output_instructions TEXT";
+            alter.ExecuteNonQuery();
+        }
     }
 
     private void MigrateFromJson()
@@ -235,19 +287,20 @@ public class DynamicTools
         conn.Open();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name, description, parameters, function_type, body, compiled_assembly FROM functions WHERE name = @name";
+        cmd.CommandText = "SELECT name, description, parameters, function_type, body, compiled_assembly, output_instructions FROM functions WHERE name = @name";
         cmd.Parameters.AddWithValue("@name", name);
 
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
             return $"Function '{name}' not found. Use list_dynamic_functions to see available functions.";
 
-        var funcName       = reader.GetString(0);
-        var description    = reader.GetString(1);
-        var parametersJson = reader.GetString(2);
-        var functionType   = reader.GetString(3);
-        var body           = reader.GetString(4);
-        var hasAssembly    = !reader.IsDBNull(5);
+        var funcName            = reader.GetString(0);
+        var description         = reader.GetString(1);
+        var parametersJson      = reader.GetString(2);
+        var functionType        = reader.GetString(3);
+        var body                = reader.GetString(4);
+        var hasAssembly         = !reader.IsDBNull(5);
+        var outputInstructions  = reader.IsDBNull(6) ? null : reader.GetString(6);
 
         var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parametersJson, ReadOptions)
                         ?? new List<DynParam>();
@@ -282,6 +335,12 @@ public class DynamicTools
             sb.AppendLine($"  {lineNum} | {lines[i].TrimEnd('\r')}");
         }
 
+        if (!string.IsNullOrWhiteSpace(outputInstructions))
+        {
+            sb.AppendLine();
+            sb.AppendLine($"Output Instructions: {outputInstructions}");
+        }
+
         return sb.ToString().TrimEnd();
     }
 
@@ -299,7 +358,9 @@ public class DynamicTools
         [Description("Plain English instructions (supports {paramName} substitution) or C# body depending on functionType")]
             string body,
         [Description("Function type: 'instructions' for plain English (recommended), or 'code' for C# (compiled at runtime)")]
-            string functionType = "instructions")
+            string functionType = "instructions",
+        [Description("Optional instructions for how to present/format the output after execution (e.g. 'present as a markdown table', 'summarize in bullet points')")]
+            string outputInstructions = "")
     {
         try
         {
@@ -308,11 +369,12 @@ public class DynamicTools
 
             var func = new DynamicFunction
             {
-                Name         = name,
-                Description  = description,
-                Parameters   = dynParams,
-                FunctionType = functionType ?? "instructions",
-                Body         = body,
+                Name                = name,
+                Description         = description,
+                Parameters          = dynParams,
+                FunctionType        = functionType ?? "instructions",
+                Body                = body,
+                OutputInstructions  = string.IsNullOrWhiteSpace(outputInstructions) ? null : outputInstructions,
             };
 
             byte[]? assemblyBytes = null;
@@ -359,7 +421,7 @@ public class DynamicTools
         conn.Open();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name, description, parameters, function_type, body, compiled_assembly FROM functions WHERE name = @name";
+        cmd.CommandText = "SELECT name, description, parameters, function_type, body, compiled_assembly, output_instructions FROM functions WHERE name = @name";
         cmd.Parameters.AddWithValue("@name", name);
 
         using var reader = cmd.ExecuteReader();
@@ -370,18 +432,83 @@ public class DynamicTools
         var functionType = reader.GetString(3);
         var body = reader.GetString(4);
         var parametersJson = reader.GetString(2);
+        var outputInstructions = reader.IsDBNull(6) ? null : reader.GetString(6);
         var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parametersJson, ReadOptions)
                         ?? new List<DynParam>();
 
+        string result;
+
         if (string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase))
-            return ExecuteInstructions(body, dynParams, arguments);
+        {
+            result = ExecuteInstructions(body, dynParams, arguments);
+        }
+        else
+        {
+            // Code function — load compiled assembly
+            if (reader.IsDBNull(5))
+                return $"Function '{name}' has no compiled assembly. Re-register it to compile.";
 
-        // Code function — load compiled assembly
-        if (reader.IsDBNull(5))
-            return $"Function '{name}' has no compiled assembly. Re-register it to compile.";
+            var assemblyBytes = (byte[])reader[5];
+            result = ExecuteCompiledCode(name, assemblyBytes, dynParams, arguments);
+        }
 
-        var assemblyBytes = (byte[])reader[5];
-        return ExecuteCompiledCode(name, assemblyBytes, dynParams, arguments);
+        if (!string.IsNullOrWhiteSpace(outputInstructions))
+            result += $"\n\n[Output Instructions]: {outputInstructions}";
+
+        return result;
+    }
+
+    // ── Out-of-process invocation ──────────────────────────────────────────────
+
+    [McpServerTool(Name = "call_dynamic_process")]
+    [Description("Calls a dynamic function in a separate process (out-of-process execution). " +
+                 "Useful for parallel execution or isolating side effects.")]
+    public string CallDynamicProcess(
+        [Description("The name of the dynamic function to call")] string name,
+        [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}")
+    {
+        var exePath = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath))
+            return "Error: unable to resolve the current executable path.";
+
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exePath,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                CreateNoWindow = true,
+            };
+            psi.ArgumentList.Add("--exec");
+            psi.ArgumentList.Add(name);
+            psi.ArgumentList.Add(arguments);
+
+            var proc = System.Diagnostics.Process.Start(psi)!;
+            proc.StandardInput.Close();
+
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+
+            if (!proc.WaitForExit(120_000))
+            {
+                try { proc.Kill(entireProcessTree: true); } catch { }
+                return $"Error: process timed out after 120 seconds.";
+            }
+
+            var stdout = stdoutTask.GetAwaiter().GetResult();
+            var stderr = stderrTask.GetAwaiter().GetResult();
+
+            return proc.ExitCode == 0
+                ? stdout
+                : $"Error (exit code {proc.ExitCode}):\n{stderr}\n{stdout}".Trim();
+        }
+        catch (Exception ex)
+        {
+            return $"Error spawning process: {ex.Message}";
+        }
     }
 
     // ── Compilation ───────────────────────────────────────────────────────────
@@ -643,14 +770,15 @@ public class DynamicTools
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            INSERT OR REPLACE INTO functions (name, description, parameters, function_type, body, compiled_assembly)
-            VALUES (@name, @description, @parameters, @function_type, @body, @compiled_assembly)";
+            INSERT OR REPLACE INTO functions (name, description, parameters, function_type, body, compiled_assembly, output_instructions)
+            VALUES (@name, @description, @parameters, @function_type, @body, @compiled_assembly, @output_instructions)";
         cmd.Parameters.AddWithValue("@name", func.Name);
         cmd.Parameters.AddWithValue("@description", func.Description);
         cmd.Parameters.AddWithValue("@parameters", JsonSerializer.Serialize(func.Parameters));
         cmd.Parameters.AddWithValue("@function_type", func.FunctionType ?? "code");
         cmd.Parameters.AddWithValue("@body", func.Body);
         cmd.Parameters.AddWithValue("@compiled_assembly", (object?)assemblyBytes ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@output_instructions", (object?)func.OutputInstructions ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 }
