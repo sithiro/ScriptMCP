@@ -176,7 +176,9 @@ claude mcp remove -s user scriptmcp
 
 #### Via .mcp.json
 
-Alternatively, create a `.mcp.json` in your project directory:
+Alternatively, create a `.mcp.json` in your project directory.
+
+Windows:
 
 ```json
 {
