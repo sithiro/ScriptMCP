@@ -14,9 +14,27 @@ ScriptMCP.Console is published as a self-contained, single-file executable for:
 2. Add an MCP server config to your AI agent that targets the executable.
    - `type` must be `stdio`.
 
-### Claude Code Example (.mcp.json)
+### Claude Code
 
-Create a `.mcp.json` in your project directory:
+#### Via CLI (recommended)
+
+Use the `claude mcp add` command to register ScriptMCP as a user-level MCP server:
+
+```bash
+claude mcp add -s user scriptmcp -- "C:\Tools\ScriptMCP 1.0.4\scriptmcp.exe"
+```
+
+macOS/Linux:
+
+```bash
+claude mcp add -s user scriptmcp -- /opt/ScriptMCP\ 1.0.4/scriptmcp
+```
+
+The `-s user` flag makes ScriptMCP available across all your projects. To scope it to a single project, use `-s project` instead.
+
+#### Via .mcp.json
+
+Alternatively, create a `.mcp.json` in your project directory:
 
 ```json
 {
