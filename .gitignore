@@ -5,3 +5,4 @@
 artifacts/
 .release/
 .mcp.json
+ScriptMCP.Server/
