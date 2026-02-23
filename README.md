@@ -154,8 +154,10 @@ ScriptMCP.Console is published as a self-contained, single-file executable for:
 
 Use the `claude mcp add` command to register ScriptMCP as a user-level MCP server:
 
+Windows:
+
 ```bash
-claude mcp add -s user -t stdio scriptmcp -- “C:\Tools\ScriptMcp 1.0.9\scriptmcp.exe”
+claude mcp add -s user -t stdio scriptmcp -- 'C:\Tools\ScriptMcp 1.0.9\scriptmcp.exe'
 ```
 
 macOS/Linux:
