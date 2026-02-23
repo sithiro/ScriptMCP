@@ -23,7 +23,7 @@ Create a `.mcp.json` in your project directory:
   "servers": {
     "scriptmcp": {
       "type": "stdio",
-      "command": "C:\\Tools\\ScriptMCP 1.0.3\\scriptmcp.exe",
+      "command": "C:\\Tools\\ScriptMCP 1.0.4\\scriptmcp.exe",
       "args": []
     }
   }
@@ -37,7 +37,7 @@ macOS/Linux example:
   "servers": {
     "scriptmcp": {
       "type": "stdio",
-      "command": "/opt/ScriptMCP 1.0.3/scriptmcp",
+      "command": "/opt/ScriptMCP 1.0.4/scriptmcp",
       "args": []
     }
   }
