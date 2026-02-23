@@ -96,6 +96,8 @@ jobs:
 
       - name: Publish
         run: |
+          FOLDER="ScriptMCP ${{ needs.version.outputs.version }}"
+
           dotnet publish ScriptMCP.Console/ScriptMCP.Console.csproj \
             -c Release \
             -r ${{ matrix.rid }} \
@@ -103,22 +105,22 @@ jobs:
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:PublishTrimmed=false \
-            -o artifacts/ScriptMCP.Console-${{ matrix.rid }}
+            -o "artifacts/$FOLDER"
 
           # Rename the published executable to scriptmcp(.exe)
           if [[ "${{ matrix.rid }}" == win-* ]]; then
-            mv "artifacts/ScriptMCP.Console-${{ matrix.rid }}/ScriptMCP.Console.exe" \
-               "artifacts/ScriptMCP.Console-${{ matrix.rid }}/scriptmcp.exe"
+            mv "artifacts/$FOLDER/ScriptMCP.Console.exe" \
+               "artifacts/$FOLDER/scriptmcp.exe"
           else
-            mv "artifacts/ScriptMCP.Console-${{ matrix.rid }}/ScriptMCP.Console" \
-               "artifacts/ScriptMCP.Console-${{ matrix.rid }}/scriptmcp"
-            chmod +x "artifacts/ScriptMCP.Console-${{ matrix.rid }}/scriptmcp"
+            mv "artifacts/$FOLDER/ScriptMCP.Console" \
+               "artifacts/$FOLDER/scriptmcp"
+            chmod +x "artifacts/$FOLDER/scriptmcp"
           fi
 
       - name: Package
         run: |
           cd artifacts
-          zip -r scriptmcp-${{ matrix.rid }}.zip ScriptMCP.Console-${{ matrix.rid }}
+          zip -r scriptmcp-${{ matrix.rid }}.zip "ScriptMCP ${{ needs.version.outputs.version }}"
 
       - name: Upload Asset
         env:
