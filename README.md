@@ -206,6 +206,38 @@ macOS/Linux example:
 }
 ```
 
+### Claude Desktop
+
+In Claude Desktop, go to **Settings → Developer** and click **Edit Config** to open `claude_desktop_config.json`. Add ScriptMCP to the `mcpServers` section:
+
+![Claude Desktop MCP Settings](snapshot3.png)
+
+Windows:
+
+```json
+{
+  “mcpServers”: {
+    “scriptmcp”: {
+      “command”: “C:\\Tools\\ScriptMcp 1.0.9\\scriptmcp.exe”,
+      “args”: []
+    }
+  }
+}
+```
+
+macOS/Linux:
+
+```json
+{
+  “mcpServers”: {
+    “scriptmcp”: {
+      “command”: “/opt/scriptmcp/scriptmcp”,
+      “args”: []
+    }
+  }
+}
+```
+
 ### CLI Mode
 
 ScriptMCP can also run a single function from the command line without starting the MCP server:
