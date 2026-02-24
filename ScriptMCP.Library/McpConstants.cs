@@ -32,6 +32,10 @@ public static class McpConstants
         "The method is NOT async — use .Result or .GetAwaiter().GetResult() for async calls. " +
         "Supported parameter types: string (default), int, long, double, float, bool. " +
         "Parameters are auto-parsed from the args dictionary and available as local variables in your code. " +
+        "INTER-FUNCTION CALLS: Two helpers are available inside code functions to call other dynamic functions. " +
+        "ScriptMCP.Call(functionName, argsJson) — runs a function synchronously and returns its output string. " +
+        "ScriptMCP.Proc(functionName, argsJson) — launches a function as a subprocess and returns a System.Diagnostics.Process " +
+        "for parallel execution (read .StandardOutput, call .WaitForExit()). " +
         "OUTPUT INSTRUCTIONS: After calling call_dynamic_function or call_dynamic_process, check the result for " +
         "a trailing '[Output Instructions]: ...' section. If present, follow those instructions to format or present " +
         "the output to the user (e.g. render as a table, summarize, highlight key values). " +

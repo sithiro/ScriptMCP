@@ -571,6 +571,56 @@ public class DynamicTools
             {{func.Body}}
                 }
             }
+
+            public static class ScriptMCP
+            {
+                private static System.Diagnostics.ProcessStartInfo CreateStartInfo(string functionName, string arguments)
+                {
+                    var exePath = System.Environment.ProcessPath;
+                    if (string.IsNullOrEmpty(exePath))
+                        throw new InvalidOperationException("Unable to resolve the current executable path.");
+                    var psi = new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = exePath,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        RedirectStandardInput = true,
+                        CreateNoWindow = true,
+                    };
+                    psi.ArgumentList.Add("--exec");
+                    psi.ArgumentList.Add(functionName);
+                    psi.ArgumentList.Add(arguments);
+                    return psi;
+                }
+
+                public static string Call(string functionName, string arguments = "{}")
+                {
+                    var psi = CreateStartInfo(functionName, arguments);
+                    var proc = System.Diagnostics.Process.Start(psi)!;
+                    proc.StandardInput.Close();
+                    var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                    var stderrTask = proc.StandardError.ReadToEndAsync();
+                    if (!proc.WaitForExit(120_000))
+                    {
+                        try { proc.Kill(entireProcessTree: true); } catch { }
+                        throw new TimeoutException($"ScriptMCP.Call(\"{functionName}\") timed out after 120 seconds.");
+                    }
+                    var stdout = stdoutTask.GetAwaiter().GetResult();
+                    var stderr = stderrTask.GetAwaiter().GetResult();
+                    if (proc.ExitCode != 0)
+                        throw new Exception($"ScriptMCP.Call(\"{functionName}\") failed (exit code {proc.ExitCode}):\n{stderr}\n{stdout}".Trim());
+                    return stdout;
+                }
+
+                public static System.Diagnostics.Process Proc(string functionName, string arguments = "{}")
+                {
+                    var psi = CreateStartInfo(functionName, arguments);
+                    var proc = System.Diagnostics.Process.Start(psi)!;
+                    proc.StandardInput.Close();
+                    return proc;
+                }
+            }
             """;
 
         var syntaxTree = CSharpSyntaxTree.ParseText(sourceCode);
@@ -658,6 +708,10 @@ public class DynamicTools
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (asm.IsDynamic) continue;
+            // Skip our own assemblies — their ScriptMCP namespace collides
+            // with the ScriptMCP helper class in the source template.
+            var asmName = asm.GetName().Name ?? "";
+            if (asmName.StartsWith("ScriptMCP", StringComparison.OrdinalIgnoreCase)) continue;
 
             try
             {
