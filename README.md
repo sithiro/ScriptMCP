@@ -270,6 +270,50 @@ scriptmcp.exe --exec get_stock_price '{“symbol”:”AAPL”}'
 
 This is what `call_dynamic_process` uses under the hood.
 
+### Codex CLI (MCP)
+
+Codex supports MCP servers via its own config. You can add ScriptMCP to Codex in two ways:
+
+#### Option A: CLI
+
+Windows:
+
+```bash
+codex mcp add scriptmcp -- "C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe"
+```
+
+macOS/Linux:
+
+```bash
+codex mcp add scriptmcp -- /opt/scriptmcp/scriptmcp
+```
+
+Then start Codex normally and use `/mcp` inside the TUI to verify the server is active.
+
+To remove it:
+
+```bash
+codex mcp remove scriptmcp
+```
+
+#### Option B: config.toml
+
+Codex stores MCP configuration in `~/.codex/config.toml` (or a project-scoped `.codex/config.toml` in trusted projects). Add a server entry:
+
+```toml
+[mcp_servers.scriptmcp]
+command = "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.exe"
+# args = []
+# env = { KEY = "VALUE" }
+```
+
+macOS/Linux example:
+
+```toml
+[mcp_servers.scriptmcp]
+command = "/opt/scriptmcp/scriptmcp"
+```
+
 ### tools.db Location
 
 Functions are persisted in a SQLite database created on first run:
