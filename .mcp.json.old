@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ScriptMCP": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "ScriptMCP.Console"]
+    }
+  }
+}

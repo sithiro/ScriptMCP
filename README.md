@@ -13,8 +13,8 @@ ScriptMCP exposes 8 MCP tools that together form a self-extending toolbox:
 | `register_dynamic_function` | Register a new function (C# code or plain English instructions) |
 | `call_dynamic_function` | Execute a function in-process |
 | `call_dynamic_process` | Execute a function out-of-process (subprocess) |
-| `list_dynamic_functions` | List all registered functions |
-| `inspect_dynamic_function` | View source code and metadata of a function |
+| `list_dynamic_functions` | List registered function names as a comma-delimited string |
+| `inspect_dynamic_function` | View function metadata, with optional full source inspection |
 | `compile_dynamic_function` | Compile a code function from its stored source |
 | `delete_dynamic_function` | Remove a function |
 | `save_dynamic_functions` | Legacy no-op (functions auto-persist to SQLite) |
@@ -25,6 +25,8 @@ ScriptMCP exposes 8 MCP tools that together form a self-extending toolbox:
 2. **Execute** — functions are invoked automatically by the AI via `call_dynamic_function` (in-process) or `call_dynamic_process` (out-of-process)
 3. **Persist** — functions are **compiled via Roslyn** on registration and **stored in SQLite** — they survive server restarts
 4. **Discover** — the AI agent discovers available functions via `list_dynamic_functions` at the start of each conversation
+
+If a request maps to multiple candidate functions, the agent should ask the user which one they want before inspecting any of them. Once a single candidate is chosen, the agent should inspect that function with `inspect_dynamic_function` to verify its type, purpose, and parameters before invoking it.
 
 ### Function Types
 
