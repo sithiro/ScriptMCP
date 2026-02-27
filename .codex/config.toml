@@ -1,0 +1,4 @@
+[mcp_servers.scriptmcp]
+command = "dotnet"
+args = ["run"]
+cwd = "ScriptMCP.Console"

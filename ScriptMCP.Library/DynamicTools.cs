@@ -211,52 +211,24 @@ public class DynamicTools
     // ── Listing ───────────────────────────────────────────────────────────────
 
     [McpServerTool(Name = "list_dynamic_functions")]
-    [Description("Lists all registered dynamic functions with their name, description, and parameter signatures")]
+    [Description("Lists all registered dynamic function names as a comma-delimited string")]
     public string ListDynamicFunctions()
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name, description, parameters, function_type FROM functions";
+        cmd.CommandText = "SELECT name FROM functions ORDER BY name";
 
         using var reader = cmd.ExecuteReader();
-        var sb = new StringBuilder();
-        bool any = false;
+        var names = new List<string>();
 
         while (reader.Read())
         {
-            any = true;
-            var name = reader.GetString(0);
-            var description = reader.GetString(1);
-            var parametersJson = reader.GetString(2);
-            var functionType = reader.GetString(3);
-            var isInstr = string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase);
-
-            var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parametersJson, ReadOptions)
-                            ?? new List<DynParam>();
-
-            sb.AppendLine($"Name: {name}");
-            sb.AppendLine($"  Type: {functionType} → " +
-                          (isInstr
-                              ? "read and follow the instructions inside"
-                              : "execute with call_dynamic_function"));
-            sb.AppendLine($"  Description: {description}");
-
-            if (dynParams.Count == 0)
-            {
-                sb.AppendLine("  Parameters: (none)");
-            }
-            else
-            {
-                sb.AppendLine("  Parameters:");
-                foreach (var p in dynParams)
-                    sb.AppendLine($"    - {p.Name} ({p.Type}): {p.Description}");
-            }
-            sb.AppendLine();
+            names.Add(reader.GetString(0));
         }
 
-        return any ? sb.ToString().TrimEnd() : "No dynamic functions registered.";
+        return string.Join(", ", names);
     }
 
     // ── Deletion ──────────────────────────────────────────────────────────────
@@ -282,9 +254,10 @@ public class DynamicTools
     // ── Inspection ─────────────────────────────────────────────────────────────
 
     [McpServerTool(Name = "inspect_dynamic_function")]
-    [Description("Inspects a registered dynamic function and returns its full details including source code, parameters, and metadata in a pretty-printed format")]
+    [Description("Inspects a registered dynamic function and returns metadata and parameters. Set fullInspection=true to also include source code and compiled status.")]
     public string InspectDynamicFunction(
-        [Description("The name of the dynamic function to inspect")] string name)
+        [Description("The name of the dynamic function to inspect")] string name,
+        [Description("When true, include source code and compiled status. When false or omitted, omit those details.")] bool fullInspection = false)
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
@@ -314,28 +287,33 @@ public class DynamicTools
         sb.AppendLine($"Function: {funcName}");
         sb.AppendLine($"Type:        {functionType}");
         sb.AppendLine($"Description: {description}");
-        sb.AppendLine($"Compiled:    {(isInstr ? "N/A (instructions)" : hasAssembly ? "Yes" : "No (missing assembly)")}");
-        sb.AppendLine();
 
         if (dynParams.Count == 0)
         {
+            sb.AppendLine();
             sb.AppendLine("Parameters: (none)");
         }
         else
         {
+            sb.AppendLine();
             sb.AppendLine("Parameters:");
             foreach (var p in dynParams)
                 sb.AppendLine($"  - {p.Name} ({p.Type}): {p.Description}");
         }
 
-        sb.AppendLine();
-        sb.AppendLine($"Source ({(isInstr ? "Instructions" : "C# Code")}):");
-
-        var lines = body.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
+        if (fullInspection)
         {
-            var lineNum = (i + 1).ToString().PadLeft(3);
-            sb.AppendLine($"  {lineNum} | {lines[i].TrimEnd('\r')}");
+            sb.AppendLine();
+            sb.AppendLine($"Compiled:    {(isInstr ? "N/A (instructions)" : hasAssembly ? "Yes" : "No (missing assembly)")}");
+            sb.AppendLine();
+            sb.AppendLine($"Source ({(isInstr ? "Instructions" : "C# Code")}):");
+
+            var lines = body.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var lineNum = (i + 1).ToString().PadLeft(3);
+                sb.AppendLine($"  {lineNum} | {lines[i].TrimEnd('\r')}");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(outputInstructions))
