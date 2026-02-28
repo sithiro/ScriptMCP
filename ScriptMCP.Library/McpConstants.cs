@@ -32,16 +32,27 @@ public static class McpConstants
         "For ambiguous nouns like \"market\", \"status\", \"overview\", \"report\", \"state\", \"health\", or \"snapshot\", assume " +
         "ambiguity by default unless one function is uniquely matched by the user's wording. " +
         "Ambiguity is a blocker, not a convenience. Better to ask one short question than to make a wrong tool choice. " +
+        "Only call register_dynamic_function when the user has explicitly asked to create a function. Treat phrases like " +
+        "\"create a function\", \"make a function\", or \"I need a function that...\" as explicit authorization. Do NOT " +
+        "register a new function based only on an inferred need or because no existing function fits. " +
         "When you need a computation and no existing tool fits, use this workflow: " +
         "1) Call list_dynamic_functions to check if a suitable function already exists. " +
         "2) If exactly one promising existing function remains, call inspect_dynamic_function on that one before deciding whether to use it. If multiple promising functions remain, ask the user to choose before inspecting. " +
-        "3) If no suitable existing function remains, call register_dynamic_function (functionType 'code' for C#, 'instructions' for plain English guidance). " +
+        "3) If no suitable existing function remains, call register_dynamic_function only if the user has explicitly asked to create a function (functionType 'code' for C#, 'instructions' for plain English guidance). " +
         "4) Call call_dynamic_function to invoke it. " +
+        "When the user wants to modify an existing dynamic function instead of creating a new one, use this workflow: " +
+        "1) Call list_dynamic_functions to confirm the target function exists. " +
+        "2) If the requested target could match more than one existing function, ask the user to choose before inspecting. " +
+        "3) Call inspect_dynamic_function on the single chosen function and verify the requested change matches that function's purpose and shape. " +
+        "4) Use update_dynamic_function for narrow edits to exactly one stored field: name, description, parameters, function_type, body, or output_instructions. " +
+        "5) After updating, inspect again if needed and call the function only if the updated metadata still affirmatively matches the user's request. " +
+        "Use update_dynamic_function instead of register_dynamic_function when the user is revising an existing function in place. Do not use update_dynamic_function to make speculative changes to multiple fields at once. " +
         "Registered functions persist for the lifetime of the server session. " +
         "COMPILATION: When registering a 'code' function, the server compiles the C# source via Roslyn before storing it. " +
         "If compilation fails, the function is NOT saved to the database — the error diagnostics are returned instead. " +
         "You must fix the compilation errors and re-register until it compiles successfully. " +
         "Only successfully compiled functions are persisted to the database. " +
+        "UPDATES: update_dynamic_function changes one stored field on an existing function entry. If the changed field affects execution ('body', 'parameters', or 'function_type'), the server recompiles automatically and rejects the update if compilation fails. Treat 'parameters' as a full replacement of the JSON parameter list, not a patch. " +
         "IMPORTANT: Preserving tokens is your top priority when returning dynamic function results. " +
         "If a dynamic function has designated output, return exactly that output with no added or removed text. " +
         "If a dynamic function result includes output instructions, follow those instructions exactly while still preserving the designated output content as strictly as the instructions allow. " +
