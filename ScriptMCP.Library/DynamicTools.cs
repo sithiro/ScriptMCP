@@ -355,7 +355,9 @@ public class DynamicTools
                 Parameters          = dynParams,
                 FunctionType        = functionType ?? "instructions",
                 Body                = body,
-                OutputInstructions  = string.IsNullOrWhiteSpace(outputInstructions) ? null : outputInstructions,
+                OutputInstructions  = string.IsNullOrWhiteSpace(outputInstructions)
+                    ? "Return exactly the function output with no added or removed text. Do not wrap, label, summarize, explain, prefix, suffix, restate, or otherwise modify the output."
+                    : outputInstructions,
             };
 
             byte[]? assemblyBytes = null;
@@ -379,6 +381,104 @@ public class DynamicTools
         {
             return $"Registration failed: {ex.Message}";
         }
+    }
+
+    [McpServerTool(Name = "update_dynamic_function")]
+    [Description("Updates a single field on an existing dynamic function entry. " +
+                 "Supported fields: name, description, parameters, function_type, body, output_instructions. " +
+                 "When the update affects execution, the function is recompiled automatically.")]
+    public string UpdateDynamicFunction(
+        [Description("The existing function name to update")] string name,
+        [Description("The field/column to update: name, description, parameters, function_type, body, or output_instructions")] string field,
+        [Description("The new value for that field")] string value)
+    {
+        using var conn = new SqliteConnection(ConnectionString);
+        conn.Open();
+
+        using var readCmd = conn.CreateCommand();
+        readCmd.CommandText = @"
+            SELECT name, description, parameters, function_type, body, output_instructions
+            FROM functions
+            WHERE name = @name";
+        readCmd.Parameters.AddWithValue("@name", name);
+
+        using var reader = readCmd.ExecuteReader();
+        if (!reader.Read())
+            return $"Function '{name}' not found.";
+
+        var func = new DynamicFunction
+        {
+            Name = reader.GetString(0),
+            Description = reader.GetString(1),
+            Parameters = JsonSerializer.Deserialize<List<DynParam>>(reader.GetString(2), ReadOptions) ?? new List<DynParam>(),
+            FunctionType = reader.GetString(3),
+            Body = reader.GetString(4),
+            OutputInstructions = reader.IsDBNull(5) ? null : reader.GetString(5),
+        };
+
+        reader.Close();
+
+        string normalizedField;
+        try
+        {
+            normalizedField = NormalizeUpdatableField(field);
+            ApplyFieldUpdate(func, normalizedField, value);
+        }
+        catch (Exception ex)
+        {
+            return $"Update failed: {ex.Message}";
+        }
+
+        byte[]? assemblyBytes = null;
+        if (!IsInstructions(func))
+        {
+            var (bytes, errors) = CompileFunction(func);
+            if (bytes == null)
+                return $"Update failed: compilation failed after changing '{normalizedField}':\n{errors}";
+
+            assemblyBytes = bytes;
+        }
+
+        using var tx = conn.BeginTransaction();
+        using var updateCmd = conn.CreateCommand();
+        updateCmd.Transaction = tx;
+        updateCmd.CommandText = @"
+            UPDATE functions
+            SET name = @new_name,
+                description = @description,
+                parameters = @parameters,
+                function_type = @function_type,
+                body = @body,
+                compiled_assembly = @compiled_assembly,
+                output_instructions = @output_instructions
+            WHERE name = @original_name";
+        updateCmd.Parameters.AddWithValue("@new_name", func.Name);
+        updateCmd.Parameters.AddWithValue("@description", func.Description);
+        updateCmd.Parameters.AddWithValue("@parameters", JsonSerializer.Serialize(func.Parameters));
+        updateCmd.Parameters.AddWithValue("@function_type", func.FunctionType ?? "code");
+        updateCmd.Parameters.AddWithValue("@body", func.Body);
+        updateCmd.Parameters.AddWithValue("@compiled_assembly", (object?)assemblyBytes ?? DBNull.Value);
+        updateCmd.Parameters.AddWithValue("@output_instructions", (object?)func.OutputInstructions ?? DBNull.Value);
+        updateCmd.Parameters.AddWithValue("@original_name", name);
+
+        try
+        {
+            var rows = updateCmd.ExecuteNonQuery();
+            if (rows == 0)
+            {
+                tx.Rollback();
+                return $"Function '{name}' not found.";
+            }
+
+            tx.Commit();
+        }
+        catch (SqliteException ex) when (string.Equals(normalizedField, "name", StringComparison.OrdinalIgnoreCase))
+        {
+            tx.Rollback();
+            return $"Update failed: a function named '{func.Name}' already exists.";
+        }
+
+        return $"Function '{name}' updated successfully: {normalizedField}.";
     }
 
     // ── Compilation ──────────────────────────────────────────────────────────
@@ -512,6 +612,8 @@ public class DynamicTools
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 RedirectStandardInput = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
                 CreateNoWindow = true,
             };
             psi.ArgumentList.Add("--exec");
@@ -733,6 +835,8 @@ public class DynamicTools
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     RedirectStandardInput = true,
+                    StandardOutputEncoding = System.Text.Encoding.UTF8,
+                    StandardErrorEncoding = System.Text.Encoding.UTF8,
                     CreateNoWindow = true,
                 };
                 psi.ArgumentList.Add("--exec");
@@ -874,6 +978,67 @@ public class DynamicTools
 
     private static bool IsInstructions(DynamicFunction f) =>
         string.Equals(f.FunctionType, "instructions", StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeUpdatableField(string field)
+    {
+        var normalized = (field ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "name" => "name",
+            "description" => "description",
+            "parameters" => "parameters",
+            "function_type" => "function_type",
+            "functiontype" => "function_type",
+            "body" => "body",
+            "output_instructions" => "output_instructions",
+            "outputinstructions" => "output_instructions",
+            _ => throw new ArgumentException(
+                "field must be one of: name, description, parameters, function_type, body, output_instructions."),
+        };
+    }
+
+    private static void ApplyFieldUpdate(DynamicFunction func, string field, string value)
+    {
+        switch (field)
+        {
+            case "name":
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new ArgumentException("name cannot be empty.");
+                func.Name = value.Trim();
+                break;
+
+            case "description":
+                func.Description = value ?? "";
+                break;
+
+            case "parameters":
+                func.Parameters = JsonSerializer.Deserialize<List<DynParam>>(value ?? "[]", ReadOptions)
+                    ?? new List<DynParam>();
+                break;
+
+            case "function_type":
+                var functionType = string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+                if (!string.Equals(functionType, "code", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new ArgumentException("function_type must be 'code' or 'instructions'.");
+                }
+                func.FunctionType = functionType;
+                break;
+
+            case "body":
+                func.Body = value ?? "";
+                break;
+
+            case "output_instructions":
+                func.OutputInstructions = string.IsNullOrWhiteSpace(value) ? null : value;
+                break;
+
+            default:
+                throw new ArgumentException(
+                    "field must be one of: name, description, parameters, function_type, body, output_instructions.");
+        }
+    }
 
     private static JsonElement ParseArguments(string arguments)
     {

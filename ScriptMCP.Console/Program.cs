@@ -1,3 +1,4 @@
+using System.Text;
 using ScriptMCP.Library;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -5,6 +6,8 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
 McpConstants.ResolveSavePath();
+Console.InputEncoding = Encoding.UTF8;
+Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
 // ── CLI mode: --exec <functionName> [argsJson] ──────────────────────────────
 // Executes a single dynamic function and exits without starting the MCP server.

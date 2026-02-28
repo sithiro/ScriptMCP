@@ -6,11 +6,12 @@ A dynamic function runtime for AI agents via the Model Context Protocol (MCP). S
 
 ## Overview
 
-ScriptMCP exposes 8 MCP tools that together form a self-extending toolbox:
+ScriptMCP exposes 9 MCP tools that together form a self-extending toolbox:
 
 | Tool | Description |
 |------|-------------|
 | `register_dynamic_function` | Register a new function (C# code or plain English instructions) |
+| `update_dynamic_function` | Update one field on an existing function entry |
 | `call_dynamic_function` | Execute a function in-process |
 | `call_dynamic_process` | Execute a function out-of-process (subprocess) |
 | `list_dynamic_functions` | List registered function names as a comma-delimited string |
@@ -22,9 +23,14 @@ ScriptMCP exposes 8 MCP tools that together form a self-extending toolbox:
 ### How It Works
 
 1. **Register** — the AI agent writes and registers C# functions or plain English instructions on your behalf (or you provide explicit code)
-2. **Execute** — functions are invoked automatically by the AI via `call_dynamic_function` (in-process) or `call_dynamic_process` (out-of-process)
-3. **Persist** — functions are **compiled via Roslyn** on registration and **stored in SQLite** — they survive server restarts
-4. **Discover** — the AI agent discovers available functions via `list_dynamic_functions` at the start of each conversation
+2. **Update** — existing functions can be revised in place with `update_dynamic_function` when only one stored field needs to change
+3. **Execute** — functions are invoked automatically by the AI via `call_dynamic_function` (in-process) or `call_dynamic_process` (out-of-process)
+4. **Persist** — functions are **compiled via Roslyn** on registration and **stored in SQLite** — they survive server restarts
+5. **Discover** — the AI agent discovers available functions via `list_dynamic_functions` at the start of each conversation
+
+`update_dynamic_function` is intended for narrow edits to a single stored field such as `description`, `body`, or `output_instructions`. If the changed field affects execution (`body`, `parameters`, or `function_type`), ScriptMCP recompiles the function automatically before saving the update.
+
+Use `update_dynamic_function` when you want to keep the same function identity and revise one field in place. Supported fields are `name`, `description`, `parameters`, `function_type`, `body`, and `output_instructions`. The `parameters` value replaces the full stored JSON array; it is not a partial merge.
 
 If a request maps to multiple candidate functions, the agent should ask the user which one they want before inspecting any of them. Once a single candidate is chosen, the agent should inspect that function with `inspect_dynamic_function` to verify its type, purpose, and parameters before invoking it.
 
@@ -36,6 +42,27 @@ If a request maps to multiple candidate functions, the agent should ask the user
 ### Output Instructions
 
 Functions can include optional **output instructions** that tell the AI how to format results. When present, a `[Output Instructions]` tag is appended to the function output. The AI reads the instructions and formats the output accordingly — e.g. render as a markdown table, display in an ASCII box, summarize in bullet points.
+
+### Updating an Existing Function
+
+Use `update_dynamic_function` to edit exactly one stored field on an existing function:
+
+```text
+name:  existing function name
+field: one of name, description, parameters, function_type, body, output_instructions
+value: replacement value for that field
+```
+
+Typical cases:
+
+- Rename a function without changing its behavior by updating `name`
+- Refine the tool description by updating `description`
+- Replace the full parameter schema by updating `parameters`
+- Switch between `instructions` and `code` with `function_type`
+- Replace the implementation with `body`
+- Change presentation rules with `output_instructions`
+
+If the update changes `body`, `parameters`, or `function_type`, ScriptMCP recompiles automatically and rejects the update if compilation fails.
 
 ### Out-of-Process Execution
 
