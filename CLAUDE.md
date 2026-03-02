@@ -82,13 +82,20 @@ NATIVE TOOLS: In addition to the dynamic function tools above, ScriptMCP provide
   Parameter: function_name (string, required).
 - create_scheduled_task: Creates a scheduled task that runs a dynamic function at a recurring interval.
   On Windows, uses Task Scheduler (schtasks) and runs `scriptmcp.exe` directly. On Linux/macOS, uses cron.
-  Parameters: function_name (string, required), function_args (string, default "{}"), interval_minutes (int, required).
-  The task runs via --exec_out, which writes each result to a timestamped file in `scheduled_task_out`.
+  Parameters: function_name (string, required), function_args (string, default "{}"), interval_minutes (int, required), append (bool, default false).
+  The task runs via --exec_out. By default it writes each result to a timestamped file in `scheduled_task_out`; with append=true it appends to `<function>.txt`.
+  If the user wants a single output file reused across runs, set append=true during task creation.
   After creation, the task is immediately run once.
 - delete_scheduled_task: Deletes a scheduled task created for a dynamic function.
   On Windows, deletes `ScriptMCP\<function> (<interval>m)` via `schtasks`. On Linux/macOS, removes the cron entry tagged `# ScriptMCP:<function_name>`.
   Parameters: function_name (string, required), interval_minutes (int, default 1).
 - list_scheduled_tasks: Lists ScriptMCP scheduled tasks.
   On Windows, reads tasks from Task Scheduler under `\ScriptMCP\`. On Linux/macOS, lists cron entries tagged `# ScriptMCP:`.
+- start_scheduled_task: Starts or enables a scheduled task.
+  On Windows, enables `ScriptMCP\<function> (<interval>m)` and runs it immediately. On Linux/macOS, cron entries are either present or absent, so this reports the current limitation.
+  Parameters: function_name (string, required), interval_minutes (int, default 1).
+- stop_scheduled_task: Stops or disables a scheduled task.
+  On Windows, disables `ScriptMCP\<function> (<interval>m)`. On Linux/macOS, cron entries are either present or absent, so this reports that deletion is required instead.
+  Parameters: function_name (string, required), interval_minutes (int, default 1).
 These are native MCP tools — they do not appear in list_dynamic_functions and do not need inspection before use.
-Call them directly when the user asks to schedule a function, delete a scheduled task, or read previous execution output.
+Call them directly when the user asks to schedule a function, list tasks, start or stop a task, delete a scheduled task, or read previous execution output.

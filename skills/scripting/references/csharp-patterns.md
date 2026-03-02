@@ -229,8 +229,9 @@ Call `create_scheduled_task` directly — it is a native MCP tool, not a dynamic
 - `function_name`: name of the dynamic function to run
 - `function_args`: JSON arguments (default `"{}"`)
 - `interval_minutes`: recurrence interval
+- `append`: when true, append to `<function>.txt` instead of creating a new timestamped file per run
 
-The task runs via `--exec_out`, which writes each result to a timestamped file in `scheduled_task_out`.
+The task runs via `--exec_out`, which by default writes each result to a timestamped file in `scheduled_task_out`. With append mode it appends to `<function>.txt`.
 
 Call `delete_scheduled_task` directly to remove a scheduled task:
 
@@ -245,11 +246,21 @@ Call `list_scheduled_tasks` directly to list ScriptMCP-managed scheduled tasks:
 
 On Windows this lists tasks under `\ScriptMCP\`. On Linux/macOS it lists cron entries tagged `# ScriptMCP:`.
 
+Call `start_scheduled_task` directly to enable and start a task:
+
+- `function_name`: required
+- `interval_minutes`: interval used when the task was created (default `1`)
+
+Call `stop_scheduled_task` directly to disable a task:
+
+- `function_name`: required
+- `interval_minutes`: interval used when the task was created (default `1`)
+
 ### Read Exec Output (Native Tool)
 
-Call `read_scheduled_task` directly to read the latest result written for a function by scheduled tasks or `--exec_out`:
+Call `read_scheduled_task` directly to read the result written for a function by scheduled tasks or `--exec_out`:
 
-- `function_name`: required, returns the latest matching file from `scheduled_task_out`
+- `function_name`: required, returns `<function>.txt` if append mode is active; otherwise the latest matching timestamped file
 
 ### Writing Functions for Scheduled Use
 

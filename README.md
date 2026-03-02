@@ -6,7 +6,7 @@ A dynamic function runtime for AI agents via the Model Context Protocol (MCP). S
 
 ## Overview
 
-ScriptMCP exposes 13 MCP tools that together form a self-extending toolbox:
+ScriptMCP exposes 15 MCP tools that together form a self-extending toolbox:
 
 | Tool | Description |
 |------|-------------|
@@ -23,6 +23,8 @@ ScriptMCP exposes 13 MCP tools that together form a self-extending toolbox:
 | `read_scheduled_task` | Read the latest scheduled-task output for a function |
 | `delete_scheduled_task` | Delete a scheduled task for a function |
 | `list_scheduled_tasks` | List ScriptMCP scheduled tasks |
+| `start_scheduled_task` | Enable and start a scheduled task |
+| `stop_scheduled_task` | Disable a scheduled task |
 
 ### How It Works
 
@@ -82,14 +84,19 @@ If the update changes `body`, `parameters`, or `function_type`, ScriptMCP recomp
 ```
 You:    schedule get_stock_price to run every 5 minutes with {"symbol":"AAPL"}
 Agent:  [calls create_scheduled_task → function_name="get_stock_price",
-         function_args='{"symbol":"AAPL"}', interval_minutes=5]
+         function_args='{"symbol":"AAPL"}', interval_minutes=5, append=false]
         Scheduled task created and started.
 ```
+
+When creating a task, you can choose how output is stored:
+
+- `append=false` — create a unique timestamped file for each execution
+- `append=true` — append all output to a single stable `<function>.txt` file
 
 - **Windows** — uses Task Scheduler (`schtasks`) and runs `scriptmcp.exe --exec_out ...` directly.
 - **Linux / macOS** — uses `cron`. Each entry is tagged with `# ScriptMCP:<function_name>` for easy identification and removal.
 
-After creation, the function is immediately run once. The task uses `--exec_out` mode, which writes the function result to a timestamped file in `scheduled_task_out` beside the ScriptMCP database.
+After creation, the function is immediately run once. The task uses `--exec_out` mode. By default it writes the function result to a timestamped file in `scheduled_task_out` beside the ScriptMCP database. If the user specifies `append=true` during task creation, it appends to a stable `<function>.txt` file instead.
 
 `list_scheduled_tasks` lists ScriptMCP-managed tasks:
 
@@ -98,6 +105,30 @@ You:    list scheduled tasks
 Agent:  [calls list_scheduled_tasks]
         \ScriptMCP\get_time (1m)
 ```
+
+`start_scheduled_task` enables a task and starts it immediately on Windows:
+
+```text
+You:    start the get_time task
+Agent:  [calls start_scheduled_task → function_name="get_time",
+         interval_minutes=1]
+        Scheduled task enabled and started.
+```
+
+- **Windows** — enables `ScriptMCP\<function> (<interval>m)` and runs it immediately
+- **Linux / macOS** — cron entries are present or absent; the tool reports that limitation instead of simulating pause/resume
+
+`stop_scheduled_task` disables a task on Windows:
+
+```text
+You:    stop the get_time task
+Agent:  [calls stop_scheduled_task → function_name="get_time",
+         interval_minutes=1]
+        Scheduled task disabled.
+```
+
+- **Windows** — disables `ScriptMCP\<function> (<interval>m)`
+- **Linux / macOS** — cron entries are present or absent; the tool reports that deletion is required instead
 
 `delete_scheduled_task` removes a scheduled task created for a function:
 
@@ -113,7 +144,7 @@ Agent:  [calls delete_scheduled_task → function_name="get_stock_price",
 
 ### Reading Execution Output
 
-`read_scheduled_task` reads the most recent file written for a function in `scheduled_task_out`:
+`read_scheduled_task` reads the scheduled-task output for a function in `scheduled_task_out`:
 
 ```
 You:    what was the last stock price result?
@@ -121,7 +152,7 @@ Agent:  [calls read_scheduled_task → function_name="get_stock_price"]
         AAPL: $266.86 (+3.37, +1.28%)
 ```
 
-Each scheduled execution writes a new file named like `<function>_YYMMDD_HHMMSS.txt`. `read_scheduled_task` returns the contents of the latest matching file.
+By default, each scheduled execution writes a new file named like `<function>_YYMMDD_HHMMSS.txt`, and `read_scheduled_task` returns the latest matching file. With append mode enabled, output is appended to `<function>.txt`, and that file is returned instead.
 
 ## Examples
 
@@ -394,6 +425,13 @@ scriptmcp --exec_out get_stock_price '{“symbol”:”AAPL”}'
 # prints to stdout AND writes a timestamped file to scheduled_task_out
 ```
 
+Add `--append` to append to a stable file instead:
+
+```bash
+scriptmcp --exec_out get_stock_price '{"symbol":"AAPL"}' --append
+# prints to stdout AND appends to scheduled_task_out/get_stock_price.txt
+```
+
 ### Codex CLI (MCP)
 
 Codex supports MCP servers via its own config. You can add ScriptMCP to Codex in two ways:
@@ -450,8 +488,8 @@ Files in this directory:
 
 | File | Purpose |
 |------|---------|
-| `tools.db` | SQLite database of registered functions |
-| `scheduled_task_out/` | Timestamped output files written by `--exec_out` |
+| `scriptmcp.db` | SQLite database of registered functions |
+| `scheduled_task_out/` | Timestamped files or append-mode `<function>.txt` files written by `--exec_out` |
 
 ## Agent Instructions (CLAUDE.md / AGENTS.md)
 

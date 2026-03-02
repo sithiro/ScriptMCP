@@ -17,23 +17,33 @@ static string StripOutputInstructions(string output)
     return idx >= 0 ? output[..idx].TrimEnd() : output;
 }
 
-// ── Helper: write scheduled-task output to a timestamped file ───────────────
-void WriteScheduledTaskOutput(string functionName, string result)
+// ── Helper: write scheduled-task output to either a new file or an append file
+void WriteScheduledTaskOutput(string functionName, string result, bool append)
 {
-    var outputPath = DynamicTools.GetScheduledTaskOutputPath(functionName);
-    File.WriteAllText(outputPath, result, fileEncoding);
+    if (append)
+    {
+        var appendPath = DynamicTools.GetScheduledTaskAppendOutputPath(functionName);
+        var text = result + Environment.NewLine;
+        File.AppendAllText(appendPath, text, fileEncoding);
+        return;
+    }
+
+    var timestampedPath = DynamicTools.GetScheduledTaskOutputPath(functionName);
+    File.WriteAllText(timestampedPath, result, fileEncoding);
 }
 
 // ── CLI mode: --exec <functionName> [argsJson] ──────────────────────────────
 // Executes a single dynamic function and exits without starting the MCP server.
 var execIndex = Array.IndexOf(args, "--exec");
 var execOutIndex = Array.IndexOf(args, "--exec_out");
+var appendIndex = Array.IndexOf(args, "--append");
 
 if (execOutIndex >= 0 && execOutIndex + 1 < args.Length)
 {
     // --exec_out: execute function, write to stdout and persist scheduled-task output
     var functionName = args[execOutIndex + 1];
     var argsJson = (execOutIndex + 2 < args.Length) ? args[execOutIndex + 2] : "{}";
+    var append = appendIndex >= 0;
 
     try
     {
@@ -42,7 +52,7 @@ if (execOutIndex >= 0 && execOutIndex + 1 < args.Length)
         Console.Write(result);
 
         var cleanResult = StripOutputInstructions(result);
-        WriteScheduledTaskOutput(functionName, cleanResult);
+        WriteScheduledTaskOutput(functionName, cleanResult, append);
     }
     catch (Exception ex)
     {

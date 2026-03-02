@@ -28,6 +28,8 @@ ScriptMCP exposes these MCP tools:
 | `create_scheduled_task` | Create a scheduled task (Windows Task Scheduler or cron) for a dynamic function |
 | `delete_scheduled_task` | Delete a scheduled task for a dynamic function |
 | `list_scheduled_tasks` | List ScriptMCP scheduled tasks |
+| `start_scheduled_task` | Enable and start a scheduled task |
+| `stop_scheduled_task` | Disable a scheduled task |
 
 ## Function Types
 
@@ -169,11 +171,18 @@ Use `create_scheduled_task` to run a dynamic function on a recurring schedule:
 - **function_name** (required): The dynamic function to run
 - **function_args** (default `"{}"`): JSON arguments for the function
 - **interval_minutes** (required): How often to run, in minutes
+- **append** (default `false`): When true, append to `<function>.txt` instead of creating a new timestamped file each run
+
+Ask the user whether they want:
+- a unique output file per run
+- or a single output file reused across runs
+
+Set `append=true` only for the single-file behavior.
 
 On **Windows**, uses Task Scheduler (`schtasks`) and runs `scriptmcp.exe` directly.
 On **Linux/macOS**, uses cron. Each entry is tagged with `# ScriptMCP:<function_name>` for easy identification and removal.
 
-The task uses `--exec_out` mode, which runs the function and writes the result to a timestamped file in `scheduled_task_out` beside the ScriptMCP database.
+The task uses `--exec_out` mode. By default it writes the result to a timestamped file in `scheduled_task_out` beside the ScriptMCP database. With `append=true`, it appends to `<function>.txt`.
 
 After creation, the task is immediately run once. The tool returns the task name and management commands (run, disable, delete).
 
@@ -190,17 +199,27 @@ Use `list_scheduled_tasks` to list ScriptMCP-managed tasks:
 On **Windows**, it lists tasks under `\ScriptMCP\`.
 On **Linux/macOS**, it lists cron entries tagged `# ScriptMCP:`.
 
+Use `start_scheduled_task` to enable a task and start it immediately:
+
+- **function_name** (required): The dynamic function whose scheduled task should be started
+- **interval_minutes** (default `1`): The interval used when the task was created
+
+Use `stop_scheduled_task` to disable a task:
+
+- **function_name** (required): The dynamic function whose scheduled task should be stopped
+- **interval_minutes** (default `1`): The interval used when the task was created
+
 ### Reading Scheduled Task Output
 
-Use `read_scheduled_task` to read the most recent result written for a function by `--exec_out`:
+Use `read_scheduled_task` to read the result written for a function by `--exec_out`:
 
-- **function_name**: Required. Returns the contents of the latest matching file in `scheduled_task_out`.
+- **function_name**: Required. Returns `<function>.txt` if append mode is in use; otherwise returns the latest matching timestamped file.
 
-Each scheduled execution writes a new file named like `<function>_YYMMDD_HHMMSS.txt`.
+Each scheduled execution either writes a new file named like `<function>_YYMMDD_HHMMSS.txt` or appends to `<function>.txt`.
 
 ### Native Tools vs Dynamic Functions
 
-`read_scheduled_task`, `create_scheduled_task`, `delete_scheduled_task`, and `list_scheduled_tasks` are **native MCP tools** — they do not appear in `list_dynamic_functions` and do not need inspection before use. Call them directly.
+`read_scheduled_task`, `create_scheduled_task`, `delete_scheduled_task`, `list_scheduled_tasks`, `start_scheduled_task`, and `stop_scheduled_task` are **native MCP tools** — they do not appear in `list_dynamic_functions` and do not need inspection before use. Call them directly.
 
 ## Best Practices
 
@@ -216,7 +235,7 @@ Each scheduled execution writes a new file named like `<function>_YYMMDD_HHMMSS.
 
 ## Persistence
 
-Functions are auto-saved to SQLite at `%LOCALAPPDATA%\ScriptMCP\tools.db`. No manual save needed. Functions persist across server restarts and sessions.
+Functions are auto-saved to SQLite at `%LOCALAPPDATA%\ScriptMCP\scriptmcp.db`. No manual save needed. Functions persist across server restarts and sessions.
 
 ## Additional Resources
 

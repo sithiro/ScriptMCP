@@ -54,7 +54,7 @@ public class DynamicTools
     public static string SavePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "ScriptMCP",
-        "tools.db");
+        "scriptmcp.db");
 
     private static string ConnectionString => $"Data Source={SavePath}";
 
@@ -661,6 +661,9 @@ public class DynamicTools
             return "(empty)";
 
         var prefix = GetScheduledTaskFilePrefix(function_name);
+        var appendPath = GetScheduledTaskAppendOutputPath(function_name);
+        FileInfo? appendFile = File.Exists(appendPath) ? new FileInfo(appendPath) : null;
+
         var pattern = $"^{Regex.Escape(prefix)}_(\\d{{6}}_\\d{{6}})\\.txt$";
         var latestFile = Directory.EnumerateFiles(outputDir, $"{prefix}_*.txt")
             .Select(path => new FileInfo(path))
@@ -674,10 +677,17 @@ public class DynamicTools
             .Select(x => x.File)
             .FirstOrDefault();
 
-        if (latestFile == null || !latestFile.Exists)
+        var chosenFile = latestFile;
+        if (appendFile != null && appendFile.Exists &&
+            (chosenFile == null || appendFile.LastWriteTimeUtc >= chosenFile.LastWriteTimeUtc))
+        {
+            chosenFile = appendFile;
+        }
+
+        if (chosenFile == null || !chosenFile.Exists)
             return $"No scheduled-task output found for '{function_name}'";
 
-        var content = File.ReadAllText(latestFile.FullName);
+        var content = File.ReadAllText(chosenFile.FullName);
         return string.IsNullOrEmpty(content) ? "(empty)" : content;
     }
 
@@ -707,6 +717,15 @@ public class DynamicTools
         return Path.Combine(outputDir, $"{prefix}_{timestamp}.txt");
     }
 
+    public static string GetScheduledTaskAppendOutputPath(string functionName)
+    {
+        var outputDir = GetScheduledTaskOutputDirectory();
+        Directory.CreateDirectory(outputDir);
+
+        var prefix = GetScheduledTaskFilePrefix(functionName);
+        return Path.Combine(outputDir, $"{prefix}.txt");
+    }
+
     // ── Scheduled Tasks ────────────────────────────────────────────────────────
 
     [McpServerTool(Name = "create_scheduled_task")]
@@ -714,16 +733,17 @@ public class DynamicTools
     public string CreateScheduledTask(
         [Description("Name of the ScriptMCP dynamic function to run")] string function_name,
         [Description("JSON arguments for the function (default: {})")] string function_args = "{}",
-        [Description("How often to run the task, in minutes")] int interval_minutes = 1)
+        [Description("How often to run the task, in minutes")] int interval_minutes = 1,
+        [Description("When true, append each result to a stable <function>.txt file instead of creating a new timestamped file")] bool append = false)
     {
         string exePath = Environment.ProcessPath ?? "";
         if (string.IsNullOrEmpty(exePath))
             return "Error: Unable to resolve the current executable path.";
 
         if (OperatingSystem.IsWindows())
-            return CreateScheduledTaskWindows(exePath, function_name, function_args, interval_minutes);
+            return CreateScheduledTaskWindows(exePath, function_name, function_args, interval_minutes, append);
         else
-            return CreateScheduledTaskCron(exePath, function_name, function_args, interval_minutes);
+            return CreateScheduledTaskCron(exePath, function_name, function_args, interval_minutes, append);
     }
 
     [McpServerTool(Name = "delete_scheduled_task")]
@@ -746,6 +766,30 @@ public class DynamicTools
             return ListScheduledTasksWindows();
         else
             return ListScheduledTasksCron();
+    }
+
+    [McpServerTool(Name = "start_scheduled_task")]
+    [Description("Starts or enables a scheduled task for a ScriptMCP dynamic function.")]
+    public string StartScheduledTask(
+        [Description("Name of the ScriptMCP dynamic function whose scheduled task should be started")] string function_name,
+        [Description("Interval in minutes used when the task was created")] int interval_minutes = 1)
+    {
+        if (OperatingSystem.IsWindows())
+            return StartScheduledTaskWindows(function_name, interval_minutes);
+        else
+            return StartScheduledTaskCron(function_name);
+    }
+
+    [McpServerTool(Name = "stop_scheduled_task")]
+    [Description("Stops or disables a scheduled task for a ScriptMCP dynamic function.")]
+    public string StopScheduledTask(
+        [Description("Name of the ScriptMCP dynamic function whose scheduled task should be stopped")] string function_name,
+        [Description("Interval in minutes used when the task was created")] int interval_minutes = 1)
+    {
+        if (OperatingSystem.IsWindows())
+            return StopScheduledTaskWindows(function_name, interval_minutes);
+        else
+            return StopScheduledTaskCron(function_name);
     }
 
     private static string GetScheduledTaskName(string function_name, int interval_minutes) =>
@@ -858,7 +902,7 @@ public class DynamicTools
         return string.Join(Environment.NewLine, lines);
     }
 
-    private string CreateScheduledTaskWindows(string exePath, string function_name, string function_args, int interval_minutes)
+    private string CreateScheduledTaskWindows(string exePath, string function_name, string function_args, int interval_minutes, bool append)
     {
         string tn = GetScheduledTaskName(function_name, interval_minutes);
 
@@ -880,7 +924,11 @@ public class DynamicTools
         psi.ArgumentList.Add("/TN");
         psi.ArgumentList.Add(tn);
         psi.ArgumentList.Add("/TR");
-        psi.ArgumentList.Add($"\"{exePath}\" --exec_out {function_name} \"{escapedArgs}\"");
+        var taskCommand = new StringBuilder();
+        taskCommand.Append($"\"{exePath}\" --exec_out {function_name} \"{escapedArgs}\"");
+        if (append)
+            taskCommand.Append(" --append");
+        psi.ArgumentList.Add(taskCommand.ToString());
         psi.ArgumentList.Add("/SC");
         psi.ArgumentList.Add("MINUTE");
         psi.ArgumentList.Add("/MO");
@@ -925,6 +973,7 @@ public class DynamicTools
         sb.AppendLine($"  Function: {function_name}({function_args})");
         sb.AppendLine($"  Exe:      {exePath}");
         sb.AppendLine($"  Interval: Every {interval_minutes} minute(s)");
+        sb.AppendLine($"  Output:   {(append ? "Append to <function>.txt" : "New timestamped file per run")}");
         sb.AppendLine();
         sb.AppendLine("Manage with:");
         sb.AppendLine($"  Run now:  schtasks /Run /TN \"{tn}\"");
@@ -974,11 +1023,108 @@ public class DynamicTools
         return sb.ToString().Trim();
     }
 
-    private string CreateScheduledTaskCron(string exePath, string function_name, string function_args, int interval_minutes)
+    private string StartScheduledTaskWindows(string function_name, int interval_minutes)
+    {
+        string tn = GetScheduledTaskName(function_name, interval_minutes);
+
+        var enablePsi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "schtasks",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        enablePsi.ArgumentList.Add("/Change");
+        enablePsi.ArgumentList.Add("/TN");
+        enablePsi.ArgumentList.Add(tn);
+        enablePsi.ArgumentList.Add("/ENABLE");
+
+        var enableProc = System.Diagnostics.Process.Start(enablePsi)!;
+        string enableOutput = enableProc.StandardOutput.ReadToEnd().Trim();
+        string enableError = enableProc.StandardError.ReadToEnd().Trim();
+        enableProc.WaitForExit();
+
+        if (enableProc.ExitCode != 0)
+        {
+            var err = new StringBuilder();
+            err.AppendLine($"Failed to enable task. Exit code: {enableProc.ExitCode}");
+            if (!string.IsNullOrEmpty(enableOutput)) err.AppendLine(enableOutput);
+            if (!string.IsNullOrEmpty(enableError)) err.AppendLine(enableError);
+            return err.ToString().Trim();
+        }
+
+        var runPsi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "schtasks",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        runPsi.ArgumentList.Add("/Run");
+        runPsi.ArgumentList.Add("/TN");
+        runPsi.ArgumentList.Add(tn);
+
+        var runProc = System.Diagnostics.Process.Start(runPsi)!;
+        runProc.StandardOutput.ReadToEnd();
+        runProc.StandardError.ReadToEnd();
+        runProc.WaitForExit();
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Scheduled task enabled and started.");
+        sb.AppendLine($"  Name:     {tn}");
+        sb.AppendLine($"  Function: {function_name}");
+        sb.AppendLine($"  Interval: Every {interval_minutes} minute(s)");
+        return sb.ToString().Trim();
+    }
+
+    private string StopScheduledTaskWindows(string function_name, int interval_minutes)
+    {
+        string tn = GetScheduledTaskName(function_name, interval_minutes);
+
+        var disablePsi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "schtasks",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        disablePsi.ArgumentList.Add("/Change");
+        disablePsi.ArgumentList.Add("/TN");
+        disablePsi.ArgumentList.Add(tn);
+        disablePsi.ArgumentList.Add("/DISABLE");
+
+        var disableProc = System.Diagnostics.Process.Start(disablePsi)!;
+        string disableOutput = disableProc.StandardOutput.ReadToEnd().Trim();
+        string disableError = disableProc.StandardError.ReadToEnd().Trim();
+        disableProc.WaitForExit();
+
+        if (disableProc.ExitCode != 0)
+        {
+            var err = new StringBuilder();
+            err.AppendLine($"Failed to disable task. Exit code: {disableProc.ExitCode}");
+            if (!string.IsNullOrEmpty(disableOutput)) err.AppendLine(disableOutput);
+            if (!string.IsNullOrEmpty(disableError)) err.AppendLine(disableError);
+            return err.ToString().Trim();
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Scheduled task disabled.");
+        sb.AppendLine($"  Name:     {tn}");
+        sb.AppendLine($"  Function: {function_name}");
+        sb.AppendLine($"  Interval: Every {interval_minutes} minute(s)");
+        return sb.ToString().Trim();
+    }
+
+    private string CreateScheduledTaskCron(string exePath, string function_name, string function_args, int interval_minutes, bool append)
     {
         // Build the cron command line
         string escapedArgs = function_args.Replace("'", "'\\''");
         string command = $"'{exePath}' --exec_out {function_name} '{escapedArgs}'";
+        if (append)
+            command += " --append";
 
         // Build the cron schedule expression
         string schedule = interval_minutes switch
@@ -1072,6 +1218,7 @@ public class DynamicTools
         sb.AppendLine($"  Exe:      {exePath}");
         sb.AppendLine($"  Schedule: {schedule}");
         sb.AppendLine($"  Tag:      {tag}");
+        sb.AppendLine($"  Output:   {(append ? "Append to <function>.txt" : "New timestamped file per run")}");
         sb.AppendLine();
         sb.AppendLine("Manage with:");
         sb.AppendLine($"  List:     crontab -l");
@@ -1147,6 +1294,18 @@ public class DynamicTools
         sb.AppendLine("Manage with:");
         sb.AppendLine("  List:     crontab -l");
         return sb.ToString().Trim();
+    }
+
+    private string StartScheduledTaskCron(string function_name)
+    {
+        string tag = $"# ScriptMCP:{function_name}";
+        return $"Cron jobs cannot be paused/resumed individually. Matching entries remain active if present.\n  Tag:      {tag}";
+    }
+
+    private string StopScheduledTaskCron(string function_name)
+    {
+        string tag = $"# ScriptMCP:{function_name}";
+        return $"Cron jobs cannot be paused/resumed individually. Remove the entry with delete_scheduled_task to stop it.\n  Tag:      {tag}";
     }
 
     // ── Compilation ───────────────────────────────────────────────────────────
