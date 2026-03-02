@@ -1,10 +1,12 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Reflection;
 using System.Reflection.Metadata;
 using System.Runtime.Loader;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Data.Sqlite;
@@ -360,6 +362,8 @@ public class DynamicTools
                     : outputInstructions,
             };
 
+            ValidateFunctionName(func.Name);
+
             byte[]? assemblyBytes = null;
 
             if (!IsInstructions(func))
@@ -645,52 +649,62 @@ public class DynamicTools
         }
     }
 
-    // ── Shared Output ─────────────────────────────────────────────────────────
+    // ── Scheduled Task Output ────────────────────────────────────────────────
 
-    [McpServerTool(Name = "read_shared_memory")]
-    [Description("Reads and returns JSONL entries from the ScriptMCP exec output file (written by --exec_out)")]
-    public string ReadSharedMemory(
-        [Description("If provided, search backwards from the latest entry and return only the output of the most recent match for this function name. If empty, return all entries.")]
-        string func = "")
+    [McpServerTool(Name = "read_scheduled_task")]
+    [Description("Reads the most recent scheduled-task output file for the specified dynamic function.")]
+    public string ReadScheduledTask(
+        [Description("Dynamic function name whose latest scheduled-task output should be returned")] string function_name)
     {
-        var outputPath = Path.Combine(
-            Path.GetDirectoryName(SavePath) ?? ".",
-            "exec_output.jsonl");
-
-        if (!File.Exists(outputPath))
+        var outputDir = GetScheduledTaskOutputDirectory();
+        if (!Directory.Exists(outputDir))
             return "(empty)";
 
-        var content = File.ReadAllText(outputPath).TrimEnd();
-        if (string.IsNullOrEmpty(content))
-            return "(empty)";
-
-        if (string.IsNullOrEmpty(func))
-        {
-            var fileInfo = new FileInfo(outputPath);
-            var sb = new StringBuilder();
-            sb.AppendLine($"[Size: {fileInfo.Length:N0} / 1,048,576 bytes ({(fileInfo.Length * 100.0 / 1_048_576):F2}% used)]");
-            sb.Append(content);
-            return sb.ToString();
-        }
-
-        // Search backwards through lines for the most recent match
-        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        for (int i = lines.Length - 1; i >= 0; i--)
-        {
-            try
+        var prefix = GetScheduledTaskFilePrefix(function_name);
+        var pattern = $"^{Regex.Escape(prefix)}_(\\d{{6}}_\\d{{6}})\\.txt$";
+        var latestFile = Directory.EnumerateFiles(outputDir, $"{prefix}_*.txt")
+            .Select(path => new FileInfo(path))
+            .Select(file => new
             {
-                using var doc = JsonDocument.Parse(lines[i]);
-                var root = doc.RootElement;
-                if (root.TryGetProperty("func", out var funcProp) && funcProp.GetString() == func)
-                {
-                    if (root.TryGetProperty("out", out var outProp))
-                        return outProp.GetString() ?? "";
-                }
-            }
-            catch { }
-        }
+                File = file,
+                Match = Regex.Match(file.Name, pattern, RegexOptions.CultureInvariant)
+            })
+            .Where(x => x.Match.Success)
+            .OrderByDescending(x => x.Match.Groups[1].Value, StringComparer.Ordinal)
+            .Select(x => x.File)
+            .FirstOrDefault();
 
-        return $"No entry found for '{func}'";
+        if (latestFile == null || !latestFile.Exists)
+            return $"No scheduled-task output found for '{function_name}'";
+
+        var content = File.ReadAllText(latestFile.FullName);
+        return string.IsNullOrEmpty(content) ? "(empty)" : content;
+    }
+
+    public static string GetScheduledTaskOutputDirectory() =>
+        Path.Combine(Path.GetDirectoryName(SavePath) ?? ".", "scheduled_task_out");
+
+    public static string GetScheduledTaskFilePrefix(string functionName)
+    {
+        if (string.IsNullOrWhiteSpace(functionName))
+            return "unnamed";
+
+        var sanitized = new string(functionName
+            .Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch)
+            .ToArray())
+            .Trim();
+
+        return string.IsNullOrEmpty(sanitized) ? "unnamed" : sanitized;
+    }
+
+    public static string GetScheduledTaskOutputPath(string functionName, DateTime? utcNow = null)
+    {
+        var outputDir = GetScheduledTaskOutputDirectory();
+        Directory.CreateDirectory(outputDir);
+
+        var prefix = GetScheduledTaskFilePrefix(functionName);
+        var timestamp = (utcNow ?? DateTime.UtcNow).ToString("yyMMdd_HHmmss", CultureInfo.InvariantCulture);
+        return Path.Combine(outputDir, $"{prefix}_{timestamp}.txt");
     }
 
     // ── Scheduled Tasks ────────────────────────────────────────────────────────
@@ -712,10 +726,141 @@ public class DynamicTools
             return CreateScheduledTaskCron(exePath, function_name, function_args, interval_minutes);
     }
 
+    [McpServerTool(Name = "delete_scheduled_task")]
+    [Description("Deletes a scheduled task (Windows Task Scheduler or cron on Linux/macOS) for a ScriptMCP dynamic function.")]
+    public string DeleteScheduledTask(
+        [Description("Name of the ScriptMCP dynamic function whose scheduled task should be deleted")] string function_name,
+        [Description("Interval in minutes used when the task was created")] int interval_minutes = 1)
+    {
+        if (OperatingSystem.IsWindows())
+            return DeleteScheduledTaskWindows(function_name, interval_minutes);
+        else
+            return DeleteScheduledTaskCron(function_name);
+    }
+
+    [McpServerTool(Name = "list_scheduled_tasks")]
+    [Description("Lists ScriptMCP scheduled tasks from Windows Task Scheduler or cron.")]
+    public string ListScheduledTasks()
+    {
+        if (OperatingSystem.IsWindows())
+            return ListScheduledTasksWindows();
+        else
+            return ListScheduledTasksCron();
+    }
+
+    private static string GetScheduledTaskName(string function_name, int interval_minutes) =>
+        $"ScriptMCP\\{function_name} ({interval_minutes}m)";
+
+    private string ListScheduledTasksWindows()
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "schtasks",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        psi.ArgumentList.Add("/Query");
+        psi.ArgumentList.Add("/FO");
+        psi.ArgumentList.Add("LIST");
+
+        var proc = System.Diagnostics.Process.Start(psi)!;
+        string output = proc.StandardOutput.ReadToEnd();
+        string error = proc.StandardError.ReadToEnd().Trim();
+        proc.WaitForExit();
+
+        if (proc.ExitCode != 0)
+        {
+            var err = new StringBuilder();
+            err.AppendLine($"Failed to list scheduled tasks. Exit code: {proc.ExitCode}");
+            if (!string.IsNullOrEmpty(error)) err.AppendLine(error);
+            return err.ToString().Trim();
+        }
+
+        var blocks = Regex.Split(output.Trim(), @"\r?\n\r?\n")
+            .Where(block => Regex.IsMatch(block, @"TaskName:\s*\\ScriptMCP\\", RegexOptions.IgnoreCase))
+            .ToList();
+
+        if (blocks.Count == 0)
+            return "(empty)";
+
+        var sb = new StringBuilder();
+        foreach (var block in blocks)
+        {
+            string? taskName = null;
+            string? status = null;
+            string? nextRun = null;
+
+            foreach (var rawLine in block.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                int idx = rawLine.IndexOf(':');
+                if (idx < 0) continue;
+
+                var key = rawLine[..idx].Trim();
+                var value = rawLine[(idx + 1)..].Trim();
+
+                if (key.Equals("TaskName", StringComparison.OrdinalIgnoreCase))
+                    taskName = value;
+                else if (key.Equals("Status", StringComparison.OrdinalIgnoreCase))
+                    status = value;
+                else if (key.Equals("Next Run Time", StringComparison.OrdinalIgnoreCase))
+                    nextRun = value;
+            }
+
+            if (taskName == null)
+                continue;
+
+            sb.AppendLine(taskName);
+            if (!string.IsNullOrEmpty(status))
+                sb.AppendLine($"  Status: {status}");
+            if (!string.IsNullOrEmpty(nextRun))
+                sb.AppendLine($"  Next:   {nextRun}");
+            sb.AppendLine();
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private string ListScheduledTasksCron()
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "crontab",
+            Arguments = "-l",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var proc = System.Diagnostics.Process.Start(psi)!;
+        string output = proc.StandardOutput.ReadToEnd();
+        string error = proc.StandardError.ReadToEnd().Trim();
+        proc.WaitForExit();
+
+        if (proc.ExitCode != 0 && string.IsNullOrWhiteSpace(output))
+        {
+            var err = new StringBuilder();
+            err.AppendLine($"Failed to list scheduled tasks. Exit code: {proc.ExitCode}");
+            if (!string.IsNullOrEmpty(error)) err.AppendLine(error);
+            return err.ToString().Trim();
+        }
+
+        var lines = output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => line.Contains("# ScriptMCP:", StringComparison.Ordinal))
+            .ToList();
+
+        if (lines.Count == 0)
+            return "(empty)";
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
     private string CreateScheduledTaskWindows(string exePath, string function_name, string function_args, int interval_minutes)
     {
-        string taskName = $"{function_name} ({interval_minutes}m)";
-        string tn = $"ScriptMCP\\{taskName}";
+        string tn = GetScheduledTaskName(function_name, interval_minutes);
 
         // Quote the JSON argument payload for the target process because schtasks
         // stores the executable path separately from the argument string.
@@ -786,6 +931,46 @@ public class DynamicTools
         sb.AppendLine($"  Disable:  schtasks /Change /TN \"{tn}\" /Disable");
         sb.AppendLine($"  Delete:   schtasks /Delete /TN \"{tn}\" /F");
 
+        return sb.ToString().Trim();
+    }
+
+    private string DeleteScheduledTaskWindows(string function_name, int interval_minutes)
+    {
+        string tn = GetScheduledTaskName(function_name, interval_minutes);
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "schtasks",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        psi.ArgumentList.Add("/Delete");
+        psi.ArgumentList.Add("/TN");
+        psi.ArgumentList.Add(tn);
+        psi.ArgumentList.Add("/F");
+
+        var proc = System.Diagnostics.Process.Start(psi)!;
+        string output = proc.StandardOutput.ReadToEnd().Trim();
+        string error = proc.StandardError.ReadToEnd().Trim();
+        proc.WaitForExit();
+
+        if (proc.ExitCode != 0)
+        {
+            var err = new StringBuilder();
+            err.AppendLine($"Failed to delete task. Exit code: {proc.ExitCode}");
+            if (!string.IsNullOrEmpty(output)) err.AppendLine(output);
+            if (!string.IsNullOrEmpty(error)) err.AppendLine(error);
+            return err.ToString().Trim();
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Scheduled task deleted.");
+        sb.AppendLine($"  Name:     {tn}");
+        sb.AppendLine($"  Function: {function_name}");
+        sb.AppendLine($"  Interval: Every {interval_minutes} minute(s)");
         return sb.ToString().Trim();
     }
 
@@ -892,6 +1077,75 @@ public class DynamicTools
         sb.AppendLine($"  List:     crontab -l");
         sb.AppendLine($"  Remove:   crontab -l | grep -v '{tag}' | crontab -");
 
+        return sb.ToString().Trim();
+    }
+
+    private string DeleteScheduledTaskCron(string function_name)
+    {
+        string tag = $"# ScriptMCP:{function_name}";
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "crontab",
+            Arguments = "-l",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var proc = System.Diagnostics.Process.Start(psi)!;
+        string existing = proc.StandardOutput.ReadToEnd();
+        proc.StandardError.ReadToEnd();
+        proc.WaitForExit();
+
+        var lines = existing.Split('\n').ToList();
+        var filtered = lines.Where(l => !l.Contains(tag)).ToList();
+        bool removed = filtered.Count != lines.Count;
+
+        if (!removed)
+            return $"Scheduled task not found for '{function_name}'.";
+
+        while (filtered.Count > 0 && string.IsNullOrWhiteSpace(filtered[^1]))
+            filtered.RemoveAt(filtered.Count - 1);
+        filtered.Add("");
+
+        string newCrontab = string.Join("\n", filtered);
+
+        var installPsi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "crontab",
+            Arguments = "-",
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var installProc = System.Diagnostics.Process.Start(installPsi)!;
+        installProc.StandardInput.Write(newCrontab);
+        installProc.StandardInput.Close();
+        string installOutput = installProc.StandardOutput.ReadToEnd().Trim();
+        string installError = installProc.StandardError.ReadToEnd().Trim();
+        installProc.WaitForExit();
+
+        if (installProc.ExitCode != 0)
+        {
+            var err = new StringBuilder();
+            err.AppendLine($"Failed to install crontab. Exit code: {installProc.ExitCode}");
+            if (!string.IsNullOrEmpty(installOutput)) err.AppendLine(installOutput);
+            if (!string.IsNullOrEmpty(installError)) err.AppendLine(installError);
+            return err.ToString().Trim();
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("Cron job deleted.");
+        sb.AppendLine($"  Function: {function_name}");
+        sb.AppendLine($"  Tag:      {tag}");
+        sb.AppendLine();
+        sb.AppendLine("Manage with:");
+        sb.AppendLine("  List:     crontab -l");
         return sb.ToString().Trim();
     }
 
@@ -1229,6 +1483,18 @@ public class DynamicTools
     private static bool IsInstructions(DynamicFunction f) =>
         string.Equals(f.FunctionType, "instructions", StringComparison.OrdinalIgnoreCase);
 
+    private static void ValidateFunctionName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("name cannot be empty.");
+
+        if (!Regex.IsMatch(name.Trim(), "^[A-Za-z0-9_-]+$", RegexOptions.CultureInvariant))
+        {
+            throw new ArgumentException(
+                "name must contain only letters, numbers, underscore, or hyphen.");
+        }
+    }
+
     private static string NormalizeUpdatableField(string field)
     {
         var normalized = (field ?? string.Empty).Trim().ToLowerInvariant();
@@ -1252,8 +1518,7 @@ public class DynamicTools
         switch (field)
         {
             case "name":
-                if (string.IsNullOrWhiteSpace(value))
-                    throw new ArgumentException("name cannot be empty.");
+                ValidateFunctionName(value);
                 func.Name = value.Trim();
                 break;
 

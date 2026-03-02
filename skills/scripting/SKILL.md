@@ -24,8 +24,10 @@ ScriptMCP exposes these MCP tools:
 | `call_dynamic_process` | Execute a function out-of-process (isolated, parallel) |
 | `compile_dynamic_function` | Recompile a code function |
 | `delete_dynamic_function` | Remove a function |
-| `read_shared_memory` | Read exec output entries from exec_output.jsonl |
+| `read_scheduled_task` | Read the latest scheduled-task output file for a function |
 | `create_scheduled_task` | Create a scheduled task (Windows Task Scheduler or cron) for a dynamic function |
+| `delete_scheduled_task` | Delete a scheduled task for a dynamic function |
+| `list_scheduled_tasks` | List ScriptMCP scheduled tasks |
 
 ## Function Types
 
@@ -158,7 +160,7 @@ Attach `outputInstructions` when registering a function to control presentation:
 - `"summarize in 3 bullet points"` — condenses output
 - `"return exactly as-is"` — preserves raw output
 
-## Scheduling & Shared Output
+## Scheduling & Output Files
 
 ### Scheduled Tasks
 
@@ -168,27 +170,37 @@ Use `create_scheduled_task` to run a dynamic function on a recurring schedule:
 - **function_args** (default `"{}"`): JSON arguments for the function
 - **interval_minutes** (required): How often to run, in minutes
 
-On **Windows**, uses Task Scheduler (`schtasks`) with a hidden PowerShell window so no console window flashes.
+On **Windows**, uses Task Scheduler (`schtasks`) and runs `scriptmcp.exe` directly.
 On **Linux/macOS**, uses cron. Each entry is tagged with `# ScriptMCP:<function_name>` for easy identification and removal.
 
-The task uses `--exec_out` mode, which runs the function and appends the result as a JSONL line to `exec_output.jsonl` in the ScriptMCP data directory.
+The task uses `--exec_out` mode, which runs the function and writes the result to a timestamped file in `scheduled_task_out` beside the ScriptMCP database.
 
 After creation, the task is immediately run once. The tool returns the task name and management commands (run, disable, delete).
 
-### Reading Exec Output
+Use `delete_scheduled_task` to remove a scheduled task:
 
-Use `read_shared_memory` to read results written by `--exec_out` (from scheduled tasks or manual CLI invocations):
+- **function_name** (required): The dynamic function whose scheduled task should be deleted
+- **interval_minutes** (default `1`): The interval used when the task was created
 
-- **No arguments**: Returns all JSONL entries with a file size header
-- **func parameter**: Searches backwards from the latest entry and returns only the `out` field of the most recent match
+On **Windows**, it deletes `ScriptMCP\<function> (<interval>m)` via `schtasks`.
+On **Linux/macOS**, it removes the cron entry tagged `# ScriptMCP:<function_name>`.
 
-Each JSONL entry contains: `{"func": "name", "ts": "ISO8601", "out": "result"}`.
+Use `list_scheduled_tasks` to list ScriptMCP-managed tasks:
 
-The file is capped at 1 MB — when exceeded, the oldest half of entries is discarded.
+On **Windows**, it lists tasks under `\ScriptMCP\`.
+On **Linux/macOS**, it lists cron entries tagged `# ScriptMCP:`.
+
+### Reading Scheduled Task Output
+
+Use `read_scheduled_task` to read the most recent result written for a function by `--exec_out`:
+
+- **function_name**: Required. Returns the contents of the latest matching file in `scheduled_task_out`.
+
+Each scheduled execution writes a new file named like `<function>_YYMMDD_HHMMSS.txt`.
 
 ### Native Tools vs Dynamic Functions
 
-`read_shared_memory` and `create_scheduled_task` are **native MCP tools** — they do not appear in `list_dynamic_functions` and do not need inspection before use. Call them directly.
+`read_scheduled_task`, `create_scheduled_task`, `delete_scheduled_task`, and `list_scheduled_tasks` are **native MCP tools** — they do not appear in `list_dynamic_functions` and do not need inspection before use. Call them directly.
 
 ## Best Practices
 
@@ -200,6 +212,7 @@ The file is capped at 1 MB — when exceeded, the oldest half of entries is disc
 6. **Use out-of-process for safety** — use `call_dynamic_process` for untrusted or long-running operations
 7. **Keep functions focused** — each function should do one thing well
 8. **Descriptive naming** — use clear, descriptive function names (e.g., `fetch_weather`, `parse_csv`)
+9. **Filesystem-safe names** — function names must contain only letters, numbers, underscore, or hyphen
 
 ## Persistence
 

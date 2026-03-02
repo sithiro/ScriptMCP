@@ -82,16 +82,20 @@ public static class McpConstants
         "If fullInspection is true, return the full inspection including source code and compiled status. " +
         "If fullInspection is false or omitted, return everything except source code and compiled status. " +
         "NATIVE TOOLS: In addition to the dynamic function tools above, ScriptMCP provides these built-in native tools: " +
-        "- read_shared_memory: Reads JSONL entries from the exec output file (exec_output.jsonl in the ScriptMCP data directory). " +
-        "Optional parameter: func (string) — if provided, searches backwards and returns only the 'out' field of the most recent " +
-        "matching entry. If empty, returns all entries with a file size header. " +
+        "- read_scheduled_task: Reads the most recent scheduled-task output file for a specific function from the scheduled_task_out directory beside the database. " +
+        "Parameter: function_name (string, required). " +
         "- create_scheduled_task: Creates a scheduled task that runs a dynamic function at a recurring interval. " +
-        "On Windows, uses Task Scheduler (schtasks) with a hidden PowerShell window. On Linux/macOS, uses cron. " +
+        "On Windows, uses Task Scheduler (schtasks) and runs scriptmcp.exe directly. On Linux/macOS, uses cron. " +
         "Parameters: function_name (string, required), function_args (string, default \"{}\"), interval_minutes (int, required). " +
-        "The task runs via --exec_out, which appends results to exec_output.jsonl. " +
+        "The task runs via --exec_out, which writes each execution result to a timestamped file in scheduled_task_out. " +
         "After creation, the task is immediately run once. " +
+        "- delete_scheduled_task: Deletes a scheduled task created for a dynamic function. " +
+        "On Windows, deletes ScriptMCP\\<function> (<interval>m) via schtasks. On Linux/macOS, removes the cron entry tagged # ScriptMCP:<function_name>. " +
+        "Parameters: function_name (string, required), interval_minutes (int, default 1). " +
+        "- list_scheduled_tasks: Lists ScriptMCP scheduled tasks. " +
+        "On Windows, reads tasks from Task Scheduler under \\ScriptMCP\\. On Linux/macOS, lists cron entries tagged # ScriptMCP:. " +
         "These are native MCP tools — they do not appear in list_dynamic_functions and do not need inspection before use. " +
-        "Call them directly when the user asks to schedule a function or read previous execution output.";
+        "Call them directly when the user asks to schedule a function, delete a scheduled task, or read previous execution output.";
 
     /// <summary>
     /// Resolves DynamicTools.SavePath to %LOCALAPPDATA%\ScriptMCP\tools.db,

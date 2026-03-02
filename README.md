@@ -6,7 +6,7 @@ A dynamic function runtime for AI agents via the Model Context Protocol (MCP). S
 
 ## Overview
 
-ScriptMCP exposes 11 MCP tools that together form a self-extending toolbox:
+ScriptMCP exposes 13 MCP tools that together form a self-extending toolbox:
 
 | Tool | Description |
 |------|-------------|
@@ -20,7 +20,9 @@ ScriptMCP exposes 11 MCP tools that together form a self-extending toolbox:
 | `delete_dynamic_function` | Remove a function |
 | `save_dynamic_functions` | Legacy no-op (functions auto-persist to SQLite) |
 | `create_scheduled_task` | Schedule a function to run at a recurring interval |
-| `read_shared_memory` | Read execution output from scheduled or CLI-invoked functions |
+| `read_scheduled_task` | Read the latest scheduled-task output for a function |
+| `delete_scheduled_task` | Delete a scheduled task for a function |
+| `list_scheduled_tasks` | List ScriptMCP scheduled tasks |
 
 ### How It Works
 
@@ -87,22 +89,39 @@ Agent:  [calls create_scheduled_task → function_name="get_stock_price",
 - **Windows** — uses Task Scheduler (`schtasks`) and runs `scriptmcp.exe --exec_out ...` directly.
 - **Linux / macOS** — uses `cron`. Each entry is tagged with `# ScriptMCP:<function_name>` for easy identification and removal.
 
-After creation, the function is immediately run once. The task uses `--exec_out` mode, which appends results to `exec_output.jsonl` in the ScriptMCP data directory.
+After creation, the function is immediately run once. The task uses `--exec_out` mode, which writes the function result to a timestamped file in `scheduled_task_out` beside the ScriptMCP database.
+
+`list_scheduled_tasks` lists ScriptMCP-managed tasks:
+
+```text
+You:    list scheduled tasks
+Agent:  [calls list_scheduled_tasks]
+        \ScriptMCP\get_time (1m)
+```
+
+`delete_scheduled_task` removes a scheduled task created for a function:
+
+```text
+You:    delete the 5-minute stock price task
+Agent:  [calls delete_scheduled_task → function_name="get_stock_price",
+         interval_minutes=5]
+        Scheduled task deleted.
+```
+
+- **Windows** — deletes `ScriptMCP\<function> (<interval>m)` via `schtasks /Delete`
+- **Linux / macOS** — removes the cron entry tagged `# ScriptMCP:<function_name>`
 
 ### Reading Execution Output
 
-`read_shared_memory` reads the `exec_output.jsonl` file written by `--exec_out` (from scheduled tasks or manual CLI invocations):
+`read_scheduled_task` reads the most recent file written for a function in `scheduled_task_out`:
 
 ```
 You:    what was the last stock price result?
-Agent:  [calls read_shared_memory → func="get_stock_price"]
+Agent:  [calls read_scheduled_task → function_name="get_stock_price"]
         AAPL: $266.86 (+3.37, +1.28%)
 ```
 
-- **No `func` parameter** — returns all JSONL entries with a file size header
-- **With `func` parameter** — searches backwards and returns only the `out` field of the most recent match
-
-Each entry is a JSON line: `{"func": "name", "ts": "ISO8601", "out": "result"}`. The file is capped at 1 MB — when exceeded, the oldest half of entries is discarded.
+Each scheduled execution writes a new file named like `<function>_YYMMDD_HHMMSS.txt`. `read_scheduled_task` returns the contents of the latest matching file.
 
 ## Examples
 
@@ -368,11 +387,11 @@ scriptmcp --exec get_stock_price '{“symbol”:”AAPL”}'
 
 This is what `call_dynamic_process` uses under the hood.
 
-Use `--exec_out` instead of `--exec` to also append the result to `exec_output.jsonl` (this is what scheduled tasks use):
+Use `--exec_out` instead of `--exec` to also write the result to `scheduled_task_out` (this is what scheduled tasks use):
 
 ```bash
 scriptmcp --exec_out get_stock_price '{“symbol”:”AAPL”}'
-# prints to stdout AND appends to exec_output.jsonl
+# prints to stdout AND writes a timestamped file to scheduled_task_out
 ```
 
 ### Codex CLI (MCP)
@@ -432,7 +451,7 @@ Files in this directory:
 | File | Purpose |
 |------|---------|
 | `tools.db` | SQLite database of registered functions |
-| `exec_output.jsonl` | JSONL log of `--exec_out` results (capped at 1 MB) |
+| `scheduled_task_out/` | Timestamped output files written by `--exec_out` |
 
 ## Agent Instructions (CLAUDE.md / AGENTS.md)
 
