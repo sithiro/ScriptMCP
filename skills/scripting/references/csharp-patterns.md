@@ -230,14 +230,26 @@ Call `create_scheduled_task` directly — it is a native MCP tool, not a dynamic
 - `function_args`: JSON arguments (default `"{}"`)
 - `interval_minutes`: recurrence interval
 
-The task runs via `--exec_out`, which appends results to `exec_output.jsonl`.
+The task runs via `--exec_out`, which writes each result to a timestamped file in `scheduled_task_out`.
+
+Call `delete_scheduled_task` directly to remove a scheduled task:
+
+- `function_name`: required
+- `interval_minutes`: interval used when the task was created (default `1`)
+
+On Windows this deletes `ScriptMCP\<function> (<interval>m)` via `schtasks`. On Linux/macOS it removes the cron entry tagged `# ScriptMCP:<function_name>`.
+
+Call `list_scheduled_tasks` directly to list ScriptMCP-managed scheduled tasks:
+
+- no parameters
+
+On Windows this lists tasks under `\ScriptMCP\`. On Linux/macOS it lists cron entries tagged `# ScriptMCP:`.
 
 ### Read Exec Output (Native Tool)
 
-Call `read_shared_memory` directly to read results written by scheduled tasks or `--exec_out`:
+Call `read_scheduled_task` directly to read the latest result written for a function by scheduled tasks or `--exec_out`:
 
-- No `func` parameter: returns all entries with size header
-- With `func` parameter: returns the `out` field of the most recent matching entry
+- `function_name`: required, returns the latest matching file from `scheduled_task_out`
 
 ### Writing Functions for Scheduled Use
 
