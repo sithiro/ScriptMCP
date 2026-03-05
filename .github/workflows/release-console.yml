@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   version:
@@ -120,6 +122,11 @@ jobs:
         run: |
           cd artifacts
           zip -r scriptmcp-${{ matrix.rid }}.zip "ScriptMCP ${{ needs.version.outputs.version }}"
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "artifacts/scriptmcp-${{ matrix.rid }}.zip"
 
       - name: Upload Asset
         env:

@@ -314,6 +314,28 @@ ScriptMCP.Console is published as a self-contained, single-file executable for:
 2. Add an MCP server config to your AI agent that targets the executable.
    - `type` must be `stdio`.
 
+#### macOS — Removing the Quarantine Flag
+
+macOS Gatekeeper blocks unsigned executables downloaded from the internet. Before running ScriptMCP for the first time, remove the quarantine flag:
+
+```bash
+xattr -d com.apple.quarantine /opt/scriptmcp/scriptmcp
+```
+
+Replace the path with wherever you extracted the executable. This only needs to be done once.
+
+#### Verifying Build Provenance
+
+All release binaries include GitHub artifact attestations that cryptographically prove they were built by this repository's CI pipeline.
+
+**Via the GitHub website** — visit the [Attestations page](https://github.com/sithiro/ScriptMCP/attestations) to see all signed build records. Each attestation links back to the exact workflow run and commit that produced it.
+
+**Via the GitHub CLI** — if you have the [GitHub CLI](https://cli.github.com/) installed, you can verify a downloaded binary locally:
+
+```bash
+gh attestation verify scriptmcp-osx-arm64.zip --repo sithiro/ScriptMCP
+```
+
 ### Claude Code
 
 #### Via CLI (recommended)
