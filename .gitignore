@@ -6,6 +6,9 @@ artifacts/
 .release/
 .mcp.json
 ScriptMcp.Server/
+commands/
+hooks/
+skills/
 .*
 **/.*
 !.github/
