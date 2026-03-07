@@ -178,13 +178,13 @@ Use the `claude mcp add` command to register ScriptMCP as a user-level MCP serve
 Windows:
 
 ```bash
-claude mcp add -s user -t stdio scriptmcp -- 'C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe'
+claude mcp add -s user -t stdio scriptmcp -- 'C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe' --db 'C:\Tools\ScriptMcp 1.1.1\scriptmcp.db'
 ```
 
 macOS/Linux:
 
 ```bash
-claude mcp add -s user -t stdio scriptmcp -- /opt/scriptmcp/scriptmcp
+claude mcp add -s user -t stdio scriptmcp -- /opt/scriptmcp/scriptmcp --db /opt/scriptmcp/scriptmcp.db
 ```
 
 The `-s user` flag makes ScriptMCP available across all your projects. To scope it to a single project, use `-s project` instead.
@@ -207,7 +207,10 @@ Windows:
     "scriptmcp": {
       "type": "stdio",
       "command": "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.exe",
-      "args": []
+      "args": [
+        "--db",
+        "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.db"
+      ]
     }
   }
 }
@@ -221,7 +224,10 @@ macOS/Linux example:
     "scriptmcp": {
       "type": "stdio",
       "command": "/opt/scriptmcp/scriptmcp",
-      "args": []
+      "args": [
+        "--db",
+        "/opt/scriptmcp/scriptmcp.db"
+      ]
     }
   }
 }
@@ -240,7 +246,10 @@ Windows:
   "mcpServers": {
     "scriptmcp": {
       "command": "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.exe",
-      "args": []
+      "args": [
+        "--db",
+        "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.db"
+      ]
     }
   }
 }
@@ -253,7 +262,10 @@ macOS/Linux:
   "mcpServers": {
     "scriptmcp": {
       "command": "/opt/scriptmcp/scriptmcp",
-      "args": []
+      "args": [
+        "--db",
+        "/opt/scriptmcp/scriptmcp.db"
+      ]
     }
   }
 }
@@ -273,6 +285,18 @@ scriptmcp --exec get_stock_price '{"symbol":"AAPL"}'
 
 This is what `call_dynamic_process` uses under the hood. Set `output_mode` to `Default` for `--exec` (no persisted output file), `WriteNew` for `--exec-out` (timestamped file per execution), or `WriteAppend` for `--exec-out-append` (stable `<function>.txt` append mode).
 
+Use `--db` to select a custom database path:
+
+```bash
+# absolute path
+scriptmcp --db "D:\Data\scriptmcp.db" --exec get_time
+
+# inline form also works
+scriptmcp --db="D:\Data\scriptmcp.db" --exec get_time
+```
+
+`--db` applies in both MCP server mode and CLI execution modes (`--exec`, `--exec-out`, `--exec-out-append`). If you pass a relative path (for example, `--db test.db`), it is resolved under the default ScriptMCP data directory for your OS.
+
 ### Codex CLI (MCP)
 
 Codex supports MCP servers via its own config. You can add ScriptMCP to Codex in two ways:
@@ -282,13 +306,13 @@ Codex supports MCP servers via its own config. You can add ScriptMCP to Codex in
 Windows:
 
 ```bash
-codex mcp add scriptmcp -- "C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe"
+codex mcp add scriptmcp -- "C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe" --db "C:\Tools\ScriptMcp 1.1.1\scriptmcp.db"
 ```
 
 macOS/Linux:
 
 ```bash
-codex mcp add scriptmcp -- /opt/scriptmcp/scriptmcp
+codex mcp add scriptmcp -- /opt/scriptmcp/scriptmcp --db /opt/scriptmcp/scriptmcp.db
 ```
 
 Then start Codex normally and use `/mcp` inside the TUI to verify the server is active.
@@ -306,7 +330,7 @@ Codex stores MCP configuration in `~/.codex/config.toml` (or a project-scoped `.
 ```toml
 [mcp_servers.scriptmcp]
 command = "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.exe"
-# args = []
+args = ["--db", "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.db"]
 # env = { KEY = "VALUE" }
 ```
 
@@ -315,6 +339,7 @@ macOS/Linux example:
 ```toml
 [mcp_servers.scriptmcp]
 command = "/opt/scriptmcp/scriptmcp"
+args = ["--db", "/opt/scriptmcp/scriptmcp.db"]
 ```
 
 ### Data Directory
