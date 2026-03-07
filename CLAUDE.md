@@ -79,13 +79,13 @@ INSPECTION TOOL: inspect_dynamic_function accepts the function name plus an opti
 If fullInspection is true, return the full inspection including source code and compiled status.
 If fullInspection is false or omitted, return everything except source code and compiled status.
 NATIVE TOOLS: In addition to the dynamic function tools above, ScriptMCP provides these built-in native tools:
-- read_scheduled_task: Reads the most recent scheduled-task output file for a specific function from the `exec-out`
+- read_scheduled_task: Reads the most recent scheduled-task output file for a specific function from the `output`
   directory beside the database.
   Parameter: function_name (string, required).
 - create_scheduled_task: Creates a scheduled task that runs a dynamic function at a recurring interval.
   On Windows, uses Task Scheduler (schtasks) and runs `scriptmcp.exe` directly. On Linux/macOS, uses cron.
   Parameters: function_name (string, required), function_args (string, default "{}"), interval_minutes (int, required), append (bool, default false).
-  The task runs via --exec-out. By default it writes each result to a timestamped file in `exec-out`; with append=true it appends to `<function>.txt`.
+  The task runs via --exec-out. By default it writes each result to a timestamped file in `output`; with append=true it uses --exec-out-append and appends to `<function>.txt`.
   If the user wants a single output file reused across runs, set append=true during task creation.
   After creation, the task is immediately run once.
 - delete_scheduled_task: Deletes a scheduled task created for a dynamic function.

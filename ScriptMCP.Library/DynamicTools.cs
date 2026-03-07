@@ -38,6 +38,13 @@ public class DynamicFunction
 
 public class DynamicTools
 {
+    private enum DynamicProcessOutputMode
+    {
+        Default,
+        WriteNew,
+        WriteAppend
+    }
+
     private static bool _initialized;
     private static readonly object _initLock = new();
 
@@ -776,11 +783,22 @@ public class DynamicTools
                  "Useful for parallel execution or isolating side effects.")]
     public string CallDynamicProcess(
         [Description("The name of the dynamic function to call")] string name,
-        [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}")
+        [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}",
+        [Description("Output mode: Default (uses --exec, no persisted output file), WriteNew (uses --exec-out, writes a new file per execution), WriteAppend (uses --exec-out-append, appends to one stable file)")] string output_mode = "Default")
     {
         var exePath = Environment.ProcessPath;
         if (string.IsNullOrEmpty(exePath))
             return "Error: unable to resolve the current executable path.";
+
+        if (!Enum.TryParse<DynamicProcessOutputMode>(output_mode, ignoreCase: true, out var outputMode))
+            return "Error: invalid output_mode. Supported values: Default, WriteNew, WriteAppend.";
+
+        var execFlag = outputMode switch
+        {
+            DynamicProcessOutputMode.WriteNew => "--exec-out",
+            DynamicProcessOutputMode.WriteAppend => "--exec-out-append",
+            _ => "--exec"
+        };
 
         try
         {
@@ -795,7 +813,7 @@ public class DynamicTools
                 StandardErrorEncoding = System.Text.Encoding.UTF8,
                 CreateNoWindow = true,
             };
-            psi.ArgumentList.Add("--exec");
+            psi.ArgumentList.Add(execFlag);
             psi.ArgumentList.Add(name);
             psi.ArgumentList.Add(arguments);
 
@@ -833,8 +851,7 @@ public class DynamicTools
     {
         var outputDirs = new[]
         {
-            GetScheduledTaskOutputDirectory(),
-            GetLegacyScheduledTaskOutputDirectory()
+            GetScheduledTaskOutputDirectory()
         }
         .Where(Directory.Exists)
         .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -880,10 +897,7 @@ public class DynamicTools
     }
 
     public static string GetScheduledTaskOutputDirectory() =>
-        Path.Combine(Path.GetDirectoryName(SavePath) ?? ".", "exec-out");
-
-    public static string GetLegacyScheduledTaskOutputDirectory() =>
-        Path.Combine(Path.GetDirectoryName(SavePath) ?? ".", "scheduled_task_out");
+        Path.Combine(Path.GetDirectoryName(SavePath) ?? ".", "output");
 
     public static string GetScheduledTaskFilePrefix(string functionName)
     {
@@ -1116,9 +1130,7 @@ public class DynamicTools
         psi.ArgumentList.Add(tn);
         psi.ArgumentList.Add("/TR");
         var taskCommand = new StringBuilder();
-        taskCommand.Append($"\"{exePath}\" --exec-out {function_name} \"{escapedArgs}\"");
-        if (append)
-            taskCommand.Append(" --append");
+        taskCommand.Append($"\"{exePath}\" {(append ? "--exec-out-append" : "--exec-out")} {function_name} \"{escapedArgs}\"");
         psi.ArgumentList.Add(taskCommand.ToString());
         psi.ArgumentList.Add("/SC");
         psi.ArgumentList.Add("MINUTE");
@@ -1313,9 +1325,7 @@ public class DynamicTools
     {
         // Build the cron command line
         string escapedArgs = function_args.Replace("'", "'\\''");
-        string command = $"'{exePath}' --exec-out {function_name} '{escapedArgs}'";
-        if (append)
-            command += " --append";
+        string command = $"'{exePath}' {(append ? "--exec-out-append" : "--exec-out")} {function_name} '{escapedArgs}'";
 
         // Build the cron schedule expression
         string schedule = interval_minutes switch
@@ -1395,7 +1405,7 @@ public class DynamicTools
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        runPsi.ArgumentList.Add("--exec-out");
+        runPsi.ArgumentList.Add(append ? "--exec-out-append" : "--exec-out");
         runPsi.ArgumentList.Add(function_name);
         runPsi.ArgumentList.Add(function_args);
         var runProc = System.Diagnostics.Process.Start(runPsi)!;

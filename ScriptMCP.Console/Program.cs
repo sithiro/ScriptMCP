@@ -38,14 +38,15 @@ var execIndex = Array.IndexOf(args, "--exec");
 var execOutIndex = Array.IndexOf(args, "--exec-out");
 if (execOutIndex < 0)
     execOutIndex = Array.IndexOf(args, "--exec_out"); // backward compatibility
-var appendIndex = Array.IndexOf(args, "--append");
+var execOutAppendIndex = Array.IndexOf(args, "--exec-out-append");
+if (execOutAppendIndex < 0)
+    execOutAppendIndex = Array.IndexOf(args, "--exec_out_append"); // backward compatibility
 
-if (execOutIndex >= 0 && execOutIndex + 1 < args.Length)
+if (execOutAppendIndex >= 0 && execOutAppendIndex + 1 < args.Length)
 {
-    // --exec-out: execute function, write to stdout and persist scheduled-task output
-    var functionName = args[execOutIndex + 1];
-    var argsJson = (execOutIndex + 2 < args.Length) ? args[execOutIndex + 2] : "{}";
-    var append = appendIndex >= 0;
+    // --exec-out-append: execute function, write to stdout and append output to <function>.txt
+    var functionName = args[execOutAppendIndex + 1];
+    var argsJson = (execOutAppendIndex + 2 < args.Length) ? args[execOutAppendIndex + 2] : "{}";
 
     try
     {
@@ -54,7 +55,30 @@ if (execOutIndex >= 0 && execOutIndex + 1 < args.Length)
         Console.Write(result);
 
         var cleanResult = StripOutputInstructions(result);
-        WriteScheduledTaskOutput(functionName, cleanResult, append);
+        WriteScheduledTaskOutput(functionName, cleanResult, append: true);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.Write(ex.ToString());
+        Environment.ExitCode = 1;
+    }
+    return;
+}
+
+if (execOutIndex >= 0 && execOutIndex + 1 < args.Length)
+{
+    // --exec-out: execute function, write to stdout and persist scheduled-task output
+    var functionName = args[execOutIndex + 1];
+    var argsJson = (execOutIndex + 2 < args.Length) ? args[execOutIndex + 2] : "{}";
+
+    try
+    {
+        var tools = new DynamicTools();
+        var result = tools.CallDynamicFunction(functionName, argsJson);
+        Console.Write(result);
+
+        var cleanResult = StripOutputInstructions(result);
+        WriteScheduledTaskOutput(functionName, cleanResult, append: false);
     }
     catch (Exception ex)
     {
