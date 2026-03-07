@@ -66,6 +66,30 @@ public class DynamicTools
 
     private static string ConnectionString => $"Data Source={SavePath}";
 
+    private static string? TryGetDbArgumentValueFromCurrentProcess()
+    {
+        return McpConstants.TryGetDatabasePathFromArgs(Environment.GetCommandLineArgs());
+    }
+
+    private static void AppendDatabaseArgumentFromCurrentProcess(System.Diagnostics.ProcessStartInfo psi)
+    {
+        var dbPath = TryGetDbArgumentValueFromCurrentProcess();
+        if (string.IsNullOrWhiteSpace(dbPath))
+            return;
+
+        psi.ArgumentList.Add(McpConstants.DatabaseArgumentName);
+        psi.ArgumentList.Add(dbPath);
+    }
+
+    private static string BuildDatabaseArgumentForShell()
+    {
+        var dbPath = TryGetDbArgumentValueFromCurrentProcess();
+        if (string.IsNullOrWhiteSpace(dbPath))
+            return string.Empty;
+
+        return $" {McpConstants.DatabaseArgumentName} \"{dbPath.Replace("\"", "\\\"")}\"";
+    }
+
     public DynamicTools() => Initialize();
 
     // ── Initialization ────────────────────────────────────────────────────────
@@ -813,6 +837,7 @@ public class DynamicTools
                 StandardErrorEncoding = System.Text.Encoding.UTF8,
                 CreateNoWindow = true,
             };
+            AppendDatabaseArgumentFromCurrentProcess(psi);
             psi.ArgumentList.Add(execFlag);
             psi.ArgumentList.Add(name);
             psi.ArgumentList.Add(arguments);
@@ -1129,8 +1154,9 @@ public class DynamicTools
         psi.ArgumentList.Add("/TN");
         psi.ArgumentList.Add(tn);
         psi.ArgumentList.Add("/TR");
+        var dbArg = BuildDatabaseArgumentForShell();
         var taskCommand = new StringBuilder();
-        taskCommand.Append($"\"{exePath}\" {(append ? "--exec-out-append" : "--exec-out")} {function_name} \"{escapedArgs}\"");
+        taskCommand.Append($"\"{exePath}\"{dbArg} {(append ? "--exec-out-append" : "--exec-out")} {function_name} \"{escapedArgs}\"");
         psi.ArgumentList.Add(taskCommand.ToString());
         psi.ArgumentList.Add("/SC");
         psi.ArgumentList.Add("MINUTE");
@@ -1325,7 +1351,8 @@ public class DynamicTools
     {
         // Build the cron command line
         string escapedArgs = function_args.Replace("'", "'\\''");
-        string command = $"'{exePath}' {(append ? "--exec-out-append" : "--exec-out")} {function_name} '{escapedArgs}'";
+        var dbArg = BuildDatabaseArgumentForShell();
+        string command = $"'{exePath}'{dbArg} {(append ? "--exec-out-append" : "--exec-out")} {function_name} '{escapedArgs}'";
 
         // Build the cron schedule expression
         string schedule = interval_minutes switch
@@ -1405,6 +1432,7 @@ public class DynamicTools
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        AppendDatabaseArgumentFromCurrentProcess(runPsi);
         runPsi.ArgumentList.Add(append ? "--exec-out-append" : "--exec-out");
         runPsi.ArgumentList.Add(function_name);
         runPsi.ArgumentList.Add(function_args);
@@ -1687,6 +1715,32 @@ public class DynamicTools
 
         public static class ScriptMCP
         {
+            private static string? TryGetDbArgFromCurrentProcess()
+            {
+                var args = Environment.GetCommandLineArgs();
+                if (args == null || args.Length == 0)
+                    return null;
+
+                for (int i = 0; i < args.Length; i++)
+                {
+                    var arg = args[i];
+                    if (string.Equals(arg, "--db", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (i + 1 < args.Length && !string.IsNullOrWhiteSpace(args[i + 1]))
+                            return args[i + 1];
+                        return null;
+                    }
+
+                    if (arg.StartsWith("--db=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var value = arg.Substring("--db=".Length);
+                        return string.IsNullOrWhiteSpace(value) ? null : value;
+                    }
+                }
+
+                return null;
+            }
+
             private static ProcessStartInfo CreateStartInfo(string functionName, string arguments)
             {
                 var exePath = Environment.ProcessPath;
@@ -1703,6 +1757,12 @@ public class DynamicTools
                     StandardErrorEncoding = System.Text.Encoding.UTF8,
                     CreateNoWindow = true,
                 };
+                var dbArg = TryGetDbArgFromCurrentProcess();
+                if (!string.IsNullOrWhiteSpace(dbArg))
+                {
+                    psi.ArgumentList.Add("--db");
+                    psi.ArgumentList.Add(dbArg);
+                }
                 psi.ArgumentList.Add("--exec");
                 psi.ArgumentList.Add(functionName);
                 psi.ArgumentList.Add(arguments);

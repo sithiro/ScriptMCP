@@ -2,6 +2,16 @@ namespace ScriptMCP.Library;
 
 public static class McpConstants
 {
+    public const string DatabaseArgumentName = "--db";
+    public const string DefaultDatabaseFileName = "scriptmcp.db";
+
+    private static string GetDefaultDatabaseDirectory()
+    {
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ScriptMCP");
+    }
+
     public const string Instructions =
         "IMPORTANT: At the start of every conversation, you MUST call list_dynamic_functions before answering any user query, " +
         "to discover available dynamic tools. " +
@@ -107,18 +117,67 @@ public static class McpConstants
         "These are native MCP tools — they do not appear in list_dynamic_functions and do not need inspection before use. " +
         "Call them directly when the user asks to schedule a function, list tasks, start or stop a task, delete a scheduled task, or read previous execution output.";
 
-    /// <summary>
-    /// Resolves DynamicTools.SavePath to %LOCALAPPDATA%\ScriptMCP\scriptmcp.db,
-    /// creating the directory if needed.
-    /// </summary>
-    public static void ResolveSavePath()
+    public static string? TryGetDatabasePathFromArgs(string[]? args)
     {
-        var appDataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "ScriptMCP");
+        if (args == null || args.Length == 0)
+            return null;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            var arg = args[i];
+            if (!string.Equals(arg, DatabaseArgumentName, StringComparison.OrdinalIgnoreCase) &&
+                !arg.StartsWith(DatabaseArgumentName + "=", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string rawPath;
+            if (arg.StartsWith(DatabaseArgumentName + "=", StringComparison.OrdinalIgnoreCase))
+            {
+                rawPath = arg[(DatabaseArgumentName.Length + 1)..];
+            }
+            else
+            {
+                if (i + 1 >= args.Length)
+                    return null;
+                rawPath = args[i + 1];
+            }
+
+            if (string.IsNullOrWhiteSpace(rawPath))
+                return null;
+
+            var candidate = rawPath.Trim();
+            if (!Path.IsPathRooted(candidate))
+                candidate = Path.Combine(GetDefaultDatabaseDirectory(), candidate);
+
+            return Path.GetFullPath(candidate);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves DynamicTools.SavePath to either:
+    /// - --db &lt;path&gt; (if provided), or
+    /// - %LOCALAPPDATA%\ScriptMCP\scriptmcp.db.
+    /// </summary>
+    public static void ResolveSavePath(string[]? args = null)
+    {
+        var explicitPath = TryGetDatabasePathFromArgs(args);
+        if (!string.IsNullOrWhiteSpace(explicitPath))
+        {
+            var explicitDir = Path.GetDirectoryName(explicitPath);
+            if (!string.IsNullOrWhiteSpace(explicitDir))
+                Directory.CreateDirectory(explicitDir);
+
+            DynamicTools.SavePath = explicitPath;
+            return;
+        }
+
+        var appDataDir = GetDefaultDatabaseDirectory();
 
         Directory.CreateDirectory(appDataDir);
 
-        DynamicTools.SavePath = Path.Combine(appDataDir, "scriptmcp.db");
+        DynamicTools.SavePath = Path.Combine(appDataDir, DefaultDatabaseFileName);
     }
 }

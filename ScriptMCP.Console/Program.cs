@@ -5,7 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
-McpConstants.ResolveSavePath();
+McpConstants.ResolveSavePath(args);
 Console.InputEncoding = Encoding.UTF8;
 Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 var fileEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);

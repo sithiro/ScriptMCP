@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScriptMCP.Library", "Script
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScriptMcp.Server", "ScriptMcp.Server\ScriptMcp.Server.csproj", "{076CD09F-21C9-3A0D-D289-46C254A0D434}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScriptMCP.Tests", "ScriptMCP.Tests\ScriptMCP.Tests.csproj", "{EA393C7F-BEDF-4821-967A-1B049124AB45}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{076CD09F-21C9-3A0D-D289-46C254A0D434}.Release|x64.Build.0 = Release|Any CPU
 		{076CD09F-21C9-3A0D-D289-46C254A0D434}.Release|x86.ActiveCfg = Release|Any CPU
 		{076CD09F-21C9-3A0D-D289-46C254A0D434}.Release|x86.Build.0 = Release|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Debug|x64.Build.0 = Debug|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Debug|x86.Build.0 = Debug|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Release|x64.ActiveCfg = Release|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Release|x64.Build.0 = Release|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Release|x86.ActiveCfg = Release|Any CPU
+		{EA393C7F-BEDF-4821-967A-1B049124AB45}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
