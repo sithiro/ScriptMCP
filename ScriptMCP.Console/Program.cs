@@ -35,12 +35,14 @@ void WriteScheduledTaskOutput(string functionName, string result, bool append)
 // ── CLI mode: --exec <functionName> [argsJson] ──────────────────────────────
 // Executes a single dynamic function and exits without starting the MCP server.
 var execIndex = Array.IndexOf(args, "--exec");
-var execOutIndex = Array.IndexOf(args, "--exec_out");
+var execOutIndex = Array.IndexOf(args, "--exec-out");
+if (execOutIndex < 0)
+    execOutIndex = Array.IndexOf(args, "--exec_out"); // backward compatibility
 var appendIndex = Array.IndexOf(args, "--append");
 
 if (execOutIndex >= 0 && execOutIndex + 1 < args.Length)
 {
-    // --exec_out: execute function, write to stdout and persist scheduled-task output
+    // --exec-out: execute function, write to stdout and persist scheduled-task output
     var functionName = args[execOutIndex + 1];
     var argsJson = (execOutIndex + 2 < args.Length) ? args[execOutIndex + 2] : "{}";
     var append = appendIndex >= 0;

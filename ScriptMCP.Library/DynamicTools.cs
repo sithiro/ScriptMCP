@@ -831,16 +831,29 @@ public class DynamicTools
     public string ReadScheduledTask(
         [Description("Dynamic function name whose latest scheduled-task output should be returned")] string function_name)
     {
-        var outputDir = GetScheduledTaskOutputDirectory();
-        if (!Directory.Exists(outputDir))
+        var outputDirs = new[]
+        {
+            GetScheduledTaskOutputDirectory(),
+            GetLegacyScheduledTaskOutputDirectory()
+        }
+        .Where(Directory.Exists)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+        if (outputDirs.Length == 0)
             return "(empty)";
 
         var prefix = GetScheduledTaskFilePrefix(function_name);
-        var appendPath = GetScheduledTaskAppendOutputPath(function_name);
-        FileInfo? appendFile = File.Exists(appendPath) ? new FileInfo(appendPath) : null;
+        var appendFile = outputDirs
+            .Select(dir => Path.Combine(dir, $"{prefix}.txt"))
+            .Where(File.Exists)
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(f => f.LastWriteTimeUtc)
+            .FirstOrDefault();
 
         var pattern = $"^{Regex.Escape(prefix)}_(\\d{{6}}_\\d{{6}})\\.txt$";
-        var latestFile = Directory.EnumerateFiles(outputDir, $"{prefix}_*.txt")
+        var latestFile = outputDirs
+            .SelectMany(dir => Directory.EnumerateFiles(dir, $"{prefix}_*.txt"))
             .Select(path => new FileInfo(path))
             .Select(file => new
             {
@@ -867,6 +880,9 @@ public class DynamicTools
     }
 
     public static string GetScheduledTaskOutputDirectory() =>
+        Path.Combine(Path.GetDirectoryName(SavePath) ?? ".", "exec-out");
+
+    public static string GetLegacyScheduledTaskOutputDirectory() =>
         Path.Combine(Path.GetDirectoryName(SavePath) ?? ".", "scheduled_task_out");
 
     public static string GetScheduledTaskFilePrefix(string functionName)
@@ -1100,7 +1116,7 @@ public class DynamicTools
         psi.ArgumentList.Add(tn);
         psi.ArgumentList.Add("/TR");
         var taskCommand = new StringBuilder();
-        taskCommand.Append($"\"{exePath}\" --exec_out {function_name} \"{escapedArgs}\"");
+        taskCommand.Append($"\"{exePath}\" --exec-out {function_name} \"{escapedArgs}\"");
         if (append)
             taskCommand.Append(" --append");
         psi.ArgumentList.Add(taskCommand.ToString());
@@ -1297,7 +1313,7 @@ public class DynamicTools
     {
         // Build the cron command line
         string escapedArgs = function_args.Replace("'", "'\\''");
-        string command = $"'{exePath}' --exec_out {function_name} '{escapedArgs}'";
+        string command = $"'{exePath}' --exec-out {function_name} '{escapedArgs}'";
         if (append)
             command += " --append";
 
@@ -1379,7 +1395,7 @@ public class DynamicTools
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        runPsi.ArgumentList.Add("--exec_out");
+        runPsi.ArgumentList.Add("--exec-out");
         runPsi.ArgumentList.Add(function_name);
         runPsi.ArgumentList.Add(function_args);
         var runProc = System.Diagnostics.Process.Start(runPsi)!;

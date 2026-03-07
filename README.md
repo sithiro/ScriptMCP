@@ -271,7 +271,7 @@ scriptmcp --exec get_stock_price '{"symbol":"AAPL"}'
 # AAPL: $266.86 (+3.37, +1.28%)
 ```
 
-This is what `call_dynamic_process` uses under the hood. Use `--exec_out` to also write the result to `scheduled_task_out/`, and add `--append` to append to a stable file instead of creating timestamped files.
+This is what `call_dynamic_process` uses under the hood. Use `--exec-out` to also write the result to `exec-out/`, and add `--append` to append to a stable file instead of creating timestamped files.
 
 ### Codex CLI (MCP)
 
@@ -319,7 +319,7 @@ command = "/opt/scriptmcp/scriptmcp"
 
 ### Data Directory
 
-Functions are persisted in a SQLite database created on first run. Execution output from `--exec_out` is stored alongside it:
+Functions are persisted in a SQLite database created on first run. Execution output from `--exec-out` is stored alongside it:
 
 - Windows: `%LOCALAPPDATA%\ScriptMCP\`
 - macOS: `~/Library/Application Support/ScriptMCP/`
@@ -328,7 +328,7 @@ Functions are persisted in a SQLite database created on first run. Execution out
 | File                  | Purpose                                                                         |
 | --------------------- | ------------------------------------------------------------------------------- |
 | `scriptmcp.db`        | SQLite database of registered functions                                         |
-| `scheduled_task_out/` | Timestamped files or append-mode `<function>.txt` files written by `--exec_out` |
+| `exec-out/` | Timestamped files or append-mode `<function>.txt` files written by `--exec-out` |
 
 ## Agent Instructions (CLAUDE.md / AGENTS.md)
 
