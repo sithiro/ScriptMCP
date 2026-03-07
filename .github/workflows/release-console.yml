@@ -8,6 +8,12 @@ on:
       - "ScriptMCP.Console/**"
       - "ScriptMCP.Library/**"
       - ".github/workflows/release-console.yml"
+  workflow_dispatch:
+    inputs:
+      custom_version:
+        description: Optional explicit version number to release, for example 2.3.4
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -29,8 +35,36 @@ jobs:
       - name: Compute Version And Tag
         id: version
         shell: bash
+        env:
+          CUSTOM_VERSION: ${{ inputs.custom_version }}
         run: |
           set -euo pipefail
+
+          if [[ -n "${CUSTOM_VERSION:-}" ]]; then
+            if [[ ! "$CUSTOM_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "custom_version must match MAJOR.MINOR.PATCH, for example 2.3.4" >&2
+              exit 1
+            fi
+
+            custom_tag="scriptmcp-v${CUSTOM_VERSION}"
+            existing_custom_tag_commit="$(git rev-list -n 1 "$custom_tag" 2>/dev/null || true)"
+            if [[ -n "$existing_custom_tag_commit" && "$existing_custom_tag_commit" != "${GITHUB_SHA}" ]]; then
+              echo "Tag $custom_tag already exists on commit $existing_custom_tag_commit and cannot be reused for ${GITHUB_SHA}." >&2
+              exit 1
+            fi
+
+            echo "tag=$custom_tag" >> "$GITHUB_OUTPUT"
+            echo "version=$CUSTOM_VERSION" >> "$GITHUB_OUTPUT"
+
+            if [[ -z "$existing_custom_tag_commit" ]]; then
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git tag "$custom_tag"
+              git push origin "$custom_tag"
+            fi
+
+            exit 0
+          fi
 
           # If this commit already has a scriptmcp-v* tag, reuse it.
           existing_tag="$(git tag --points-at HEAD | grep -E '^scriptmcp-v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
