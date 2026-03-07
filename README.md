@@ -178,13 +178,13 @@ Use the `claude mcp add` command to register ScriptMCP as a user-level MCP serve
 Windows:
 
 ```bash
-claude mcp add -s user -t stdio scriptmcp -- 'C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe' --db 'C:\Tools\ScriptMcp 1.1.1\scriptmcp.db'
+claude mcp add -s user -t stdio scriptmcp -- 'C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe'
 ```
 
 macOS/Linux:
 
 ```bash
-claude mcp add -s user -t stdio scriptmcp -- /opt/scriptmcp/scriptmcp --db /opt/scriptmcp/scriptmcp.db
+claude mcp add -s user -t stdio scriptmcp -- /opt/scriptmcp/scriptmcp
 ```
 
 The `-s user` flag makes ScriptMCP available across all your projects. To scope it to a single project, use `-s project` instead.
@@ -207,10 +207,7 @@ Windows:
     "scriptmcp": {
       "type": "stdio",
       "command": "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.exe",
-      "args": [
-        "--db",
-        "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.db"
-      ]
+      "args": []
     }
   }
 }
@@ -224,10 +221,7 @@ macOS/Linux example:
     "scriptmcp": {
       "type": "stdio",
       "command": "/opt/scriptmcp/scriptmcp",
-      "args": [
-        "--db",
-        "/opt/scriptmcp/scriptmcp.db"
-      ]
+      "args": []
     }
   }
 }
@@ -246,10 +240,7 @@ Windows:
   "mcpServers": {
     "scriptmcp": {
       "command": "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.exe",
-      "args": [
-        "--db",
-        "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.db"
-      ]
+      "args": []
     }
   }
 }
@@ -262,10 +253,7 @@ macOS/Linux:
   "mcpServers": {
     "scriptmcp": {
       "command": "/opt/scriptmcp/scriptmcp",
-      "args": [
-        "--db",
-        "/opt/scriptmcp/scriptmcp.db"
-      ]
+      "args": []
     }
   }
 }
@@ -306,13 +294,13 @@ Codex supports MCP servers via its own config. You can add ScriptMCP to Codex in
 Windows:
 
 ```bash
-codex mcp add scriptmcp -- "C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe" --db "C:\Tools\ScriptMcp 1.1.1\scriptmcp.db"
+codex mcp add scriptmcp -- "C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe"
 ```
 
 macOS/Linux:
 
 ```bash
-codex mcp add scriptmcp -- /opt/scriptmcp/scriptmcp --db /opt/scriptmcp/scriptmcp.db
+codex mcp add scriptmcp -- /opt/scriptmcp/scriptmcp
 ```
 
 Then start Codex normally and use `/mcp` inside the TUI to verify the server is active.
@@ -330,7 +318,7 @@ Codex stores MCP configuration in `~/.codex/config.toml` (or a project-scoped `.
 ```toml
 [mcp_servers.scriptmcp]
 command = "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.exe"
-args = ["--db", "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.db"]
+# args = []
 # env = { KEY = "VALUE" }
 ```
 
@@ -339,7 +327,6 @@ macOS/Linux example:
 ```toml
 [mcp_servers.scriptmcp]
 command = "/opt/scriptmcp/scriptmcp"
-args = ["--db", "/opt/scriptmcp/scriptmcp.db"]
 ```
 
 ### Data Directory
