@@ -256,13 +256,13 @@ jobs:
       - name: Package
         run: |
           cd artifacts
-          zip -r scriptmcp-${{ matrix.rid }}.zip "ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }}"
+          zip -r scriptmcp-${{ matrix.rid }}-self-contained.zip "ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }}"
           zip -r scriptmcp-${{ matrix.rid }}-framework-dependent.zip "ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }} framework-dependent"
 
       - name: Attest Self-Contained Build Provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: "artifacts/scriptmcp-${{ matrix.rid }}.zip"
+          subject-path: "artifacts/scriptmcp-${{ matrix.rid }}-self-contained.zip"
 
       - name: Attest Framework-Dependent Build Provenance
         uses: actions/attest-build-provenance@v2
@@ -274,7 +274,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ needs.version.outputs.tag }}" \
-            "artifacts/scriptmcp-${{ matrix.rid }}.zip" \
+            "artifacts/scriptmcp-${{ matrix.rid }}-self-contained.zip" \
             "artifacts/scriptmcp-${{ matrix.rid }}-framework-dependent.zip" \
             --repo "${{ github.repository }}" \
             --clobber
