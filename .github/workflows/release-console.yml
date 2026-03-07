@@ -101,7 +101,12 @@ jobs:
               ;;
           esac
 
-          cleanup_release_state() {
+          digests_file="$(mktemp)"
+          tags_file="$(mktemp)"
+          payload_file="$(mktemp)"
+          trap 'rm -f "$digests_file" "$tags_file" "$payload_file"' EXIT
+
+          collect_release_state() {
             local tag="$1"
 
             if gh release view "$tag" --repo "$REPOSITORY" >/dev/null 2>&1; then
@@ -114,28 +119,41 @@ jobs:
                     sort -u
                 )
 
-                for digest in "${digests[@]}"; do
-                  encoded_digest="${digest//:/%3A}"
-                  gh api \
-                    --method DELETE \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "X-GitHub-Api-Version: 2022-11-28" \
-                    "/$attestation_base/digest/$encoded_digest" >/dev/null || true
-                done
+                printf '%s\n' "${digests[@]}" >> "$digests_file"
               fi
-
-              gh release delete "$tag" --repo "$REPOSITORY" -y
             fi
 
-            git push origin ":refs/tags/$tag" >/dev/null 2>&1 || true
-            git tag -d "$tag" >/dev/null 2>&1 || true
+            printf '%s\n' "$tag" >> "$tags_file"
           }
 
           mapfile -t old_tags < <(git tag --list 'scriptmcp-v*' | grep -vx "$CURRENT_TAG" || true)
           for tag in "${old_tags[@]}"; do
             [[ -n "$tag" ]] || continue
-            cleanup_release_state "$tag"
+            collect_release_state "$tag"
           done
+
+          if [[ -s "$digests_file" ]]; then
+            jq -Rn '
+              [inputs | select(length > 0)] | unique | {subject_digests: .}
+            ' < "$digests_file" > "$payload_file"
+
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "/$attestation_base/delete-request" \
+              --input "$payload_file"
+          fi
+
+          if [[ -s "$tags_file" ]]; then
+            mapfile -t tags_to_delete < <(sort -u "$tags_file")
+            for tag in "${tags_to_delete[@]}"; do
+              [[ -n "$tag" ]] || continue
+              gh release delete "$tag" --repo "$REPOSITORY" -y >/dev/null 2>&1 || true
+              git push origin ":refs/tags/$tag" >/dev/null 2>&1 || true
+              git tag -d "$tag" >/dev/null 2>&1 || true
+            done
+          fi
 
   create-release:
     runs-on: ubuntu-latest
