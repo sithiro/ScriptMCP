@@ -279,8 +279,8 @@ Use `--db` to select a custom database path:
 # absolute path
 scriptmcp --db "D:\Data\scriptmcp.db" --exec get_time
 
-# inline form also works
-scriptmcp --db="D:\Data\scriptmcp.db" --exec get_time
+# relative path (resolved under the default ScriptMCP data directory)
+scriptmcp --db test.db --exec get_time
 ```
 
 `--db` applies in both MCP server mode and CLI execution modes (`--exec`, `--exec-out`, `--exec-out-append`). If you pass a relative path (for example, `--db test.db`), it is resolved under the default ScriptMCP data directory for your OS.
