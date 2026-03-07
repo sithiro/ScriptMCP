@@ -136,6 +136,43 @@ Agent:  [calls delete_scheduled_task → function_name="get_stock_price"]
 
 ## Install
 
+### From Source Code Zip
+
+If you prefer to build ScriptMCP yourself:
+
+1. Open the GitHub release or repository page and download `Source code (zip)`.
+2. Extract it to a working folder.
+3. Ensure the .NET 9 SDK is installed. The repo pins the SDK with `global.json`.
+4. Point your MCP config at `dotnet run` for `ScriptMCP.Console`.
+
+Windows example:
+
+```json
+{
+  "mcpServers": {
+    "scriptmcp": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "C:\\path\\to\\ScriptMCP.Console\\ScriptMCP.Console.csproj", "-c", "Release"]
+    }
+  }
+}
+```
+
+macOS/Linux example:
+
+```json
+{
+  "mcpServers": {
+    "scriptmcp": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "/path/to/ScriptMCP.Console/ScriptMCP.Console.csproj", "-c", "Release"]
+    }
+  }
+}
+```
+
 ### Prebuilt Console App
 
 ScriptMCP.Console releases include two zip variants for each platform:
