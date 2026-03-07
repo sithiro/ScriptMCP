@@ -136,66 +136,17 @@ Agent:  [calls delete_scheduled_task → function_name="get_stock_price"]
 
 ## Install
 
-### From Source Code Zip
+Choose one of these installation modes first:
 
-If you prefer to build ScriptMCP yourself:
+- `Source code` — download `Source code (zip)`, install the .NET 9 SDK, and run `ScriptMCP.Console` with `dotnet run`.
+- `Framework-dependent` — download `scriptmcp-<rid>-framework-dependent.zip`, extract it, and use the included executable. This requires a compatible .NET 9 runtime on the target machine.
+- `Self-contained` — download `scriptmcp-<rid>-self-contained.zip`, extract it, and use the included executable. No separate .NET install is required.
 
-1. Open the GitHub release or repository page and download `Source code (zip)`.
-2. Extract it to a working folder.
-3. Ensure the .NET 9 SDK is installed. The repo pins the SDK with `global.json`.
-4. Point your MCP config at `dotnet run` for `ScriptMCP.Console`.
-
-Windows example:
-
-```json
-{
-  "mcpServers": {
-    "scriptmcp": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": ["run", "--project", "C:\\path\\to\\ScriptMCP.Console\\ScriptMCP.Console.csproj", "-c", "Release"]
-    }
-  }
-}
-```
-
-macOS/Linux example:
-
-```json
-{
-  "mcpServers": {
-    "scriptmcp": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": ["run", "--project", "/path/to/ScriptMCP.Console/ScriptMCP.Console.csproj", "-c", "Release"]
-    }
-  }
-}
-```
-
-### Prebuilt Console App
-
-ScriptMCP.Console releases include two zip variants for each platform:
+Supported release platforms:
 
 - Windows x64
 - Linux x64
 - macOS arm64 (Apple Silicon)
-
-Release assets:
-
-- `scriptmcp-<rid>-self-contained.zip` — self-contained build. Use this if you do not want to rely on a preinstalled .NET runtime.
-- `scriptmcp-<rid>-framework-dependent.zip` — framework-dependent build. Use this if the target machine already has the required .NET runtime installed.
-
-Examples:
-
-- `scriptmcp-win-x64-self-contained.zip`
-- `scriptmcp-win-x64-framework-dependent.zip`
-- `scriptmcp-linux-x64-self-contained.zip`
-- `scriptmcp-osx-arm64-framework-dependent.zip`
-
-1. Download the zip for your OS and preferred deployment mode, then extract it to a location of your choice (e.g. `C:\Tools\ScriptMcp 1.1.1`).
-2. Add an MCP server config to your AI agent that targets the executable.
-   - `type` must be `stdio`.
 
 #### macOS — Removing the Quarantine Flag
 
@@ -216,22 +167,26 @@ All release binaries include GitHub artifact attestations that cryptographically
 **Via the GitHub CLI** — if you have the [GitHub CLI](https://cli.github.com/) installed, you can verify a downloaded binary locally:
 
 ```bash
-gh attestation verify scriptmcp-osx-arm64.zip --repo sithiro/ScriptMCP
+gh attestation verify scriptmcp-osx-arm64-self-contained.zip --repo sithiro/ScriptMCP
 ```
 
-### Claude Code
-
-#### Via CLI (recommended)
+### Claude Code CLI
 
 Use the `claude mcp add` command to register ScriptMCP as a user-level MCP server:
 
-Windows:
+Source code:
+
+```bash
+claude mcp add -s user -t stdio scriptmcp -- dotnet run --project C:\path\to\ScriptMCP.Console\ScriptMCP.Console.csproj -c Release
+```
+
+Windows self-contained or framework dependent:
 
 ```bash
 claude mcp add -s user -t stdio scriptmcp -- 'C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe'
 ```
 
-macOS/Linux:
+macOS/Linux self-contained or framework dependent:
 
 ```bash
 claude mcp add -s user -t stdio scriptmcp -- /opt/scriptmcp/scriptmcp
@@ -245,45 +200,26 @@ To remove it:
 claude mcp remove -s user scriptmcp
 ```
 
-#### Via .mcp.json
-
-Alternatively, create a `.mcp.json` in your project directory.
-
-Windows:
-
-```json
-{
-  "mcpServers": {
-    "scriptmcp": {
-      "type": "stdio",
-      "command": "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.exe",
-      "args": []
-    }
-  }
-}
-```
-
-macOS/Linux example:
-
-```json
-{
-  "mcpServers": {
-    "scriptmcp": {
-      "type": "stdio",
-      "command": "/opt/scriptmcp/scriptmcp",
-      "args": []
-    }
-  }
-}
-```
-
 ### Claude Desktop
 
 In Claude Desktop, go to **Settings → Developer** and click **Edit Config** to open `claude_desktop_config.json`. Add ScriptMCP to the `mcpServers` section:
 
 ![Claude Desktop MCP Settings](snapshot3.png)
 
-Windows:
+Source code:
+
+```json
+{
+  "mcpServers": {
+    "scriptmcp": {
+      "command": "dotnet",
+      "args": ["run", "--project", "C:\\path\\to\\ScriptMCP.Console\\ScriptMCP.Console.csproj", "-c", "Release"]
+    }
+  }
+}
+```
+
+Windows self-contained or framework dependent:
 
 ```json
 {
@@ -296,7 +232,7 @@ Windows:
 }
 ```
 
-macOS/Linux:
+macOS/Linux self-contained or framework dependent:
 
 ```json
 {
@@ -309,45 +245,23 @@ macOS/Linux:
 }
 ```
 
-### CLI Mode
+### Codex CLI
 
-ScriptMCP can also run a single function from the command line without starting the MCP server:
+Use `codex mcp add` to register ScriptMCP:
 
-```bash
-scriptmcp --exec get_time
-# 10:07:39 pm
-
-scriptmcp --exec get_stock_price '{"symbol":"AAPL"}'
-# AAPL: $266.86 (+3.37, +1.28%)
-```
-
-This is what `call_dynamic_process` uses under the hood. Set `output_mode` to `Default` for `--exec` (no persisted output file), `WriteNew` for `--exec-out` (timestamped file per execution), or `WriteAppend` for `--exec-out-append` (stable `<function>.txt` append mode).
-
-Use `--db` to select a custom database path:
+Source code:
 
 ```bash
-# absolute path
-scriptmcp --db "D:\Data\scriptmcp.db" --exec get_time
-
-# relative path (resolved under the default ScriptMCP data directory)
-scriptmcp --db test.db --exec get_time
+codex mcp add scriptmcp -- dotnet run --project C:\path\to\ScriptMCP.Console\ScriptMCP.Console.csproj -c Release
 ```
 
-`--db` applies in both MCP server mode and CLI execution modes (`--exec`, `--exec-out`, `--exec-out-append`). If you pass a relative path (for example, `--db test.db`), it is resolved under the default ScriptMCP data directory for your OS.
-
-### Codex CLI (MCP)
-
-Codex supports MCP servers via its own config. You can add ScriptMCP to Codex in two ways:
-
-#### Option A: CLI
-
-Windows:
+Windows self-contained or framework dependent:
 
 ```bash
 codex mcp add scriptmcp -- "C:\Tools\ScriptMcp 1.1.1\scriptmcp.exe"
 ```
 
-macOS/Linux:
+macOS/Linux self-contained or framework dependent:
 
 ```bash
 codex mcp add scriptmcp -- /opt/scriptmcp/scriptmcp
@@ -361,23 +275,35 @@ To remove it:
 codex mcp remove scriptmcp
 ```
 
-#### Option B: config.toml
+### Arguments
 
-Codex stores MCP configuration in `~/.codex/config.toml` (or a project-scoped `.codex/config.toml` in trusted projects). Add a server entry:
+`scriptmcp` supports these runtime arguments:
 
-```toml
-[mcp_servers.scriptmcp]
-command = "C:\\Tools\\ScriptMcp 1.1.1\\scriptmcp.exe"
-# args = []
-# env = { KEY = "VALUE" }
+- `--db [FILEPATH|FILENAME]`: use a specific SQLite database path instead of the default ScriptMCP data directory
+- `--exec <functionName> [argsJson]`: execute one dynamic function and write the result to stdout
+- `--exec-out <functionName> [argsJson]`: execute one dynamic function, write the result to stdout, and persist the cleaned output to a new timestamped file
+- `--exec-out-append <functionName> [argsJson]`: execute one dynamic function, write the result to stdout, and append the cleaned output to a stable `<function>.txt` file
+
+Examples:
+
+```bash
+scriptmcp --exec get_time
+
+scriptmcp --exec get_stock_price '{"symbol":"AAPL"}'
 ```
 
-macOS/Linux example:
+Use `--db` to select a custom database path for either MCP mode or CLI execution mode:
 
-```toml
-[mcp_servers.scriptmcp]
-command = "/opt/scriptmcp/scriptmcp"
+```bash
+# absolute path
+scriptmcp --db "D:\Data\scriptmcp.db" --exec get_time
+
+# relative path (resolved under the default ScriptMCP data directory)
+scriptmcp --db test.db --exec get_time
 ```
+
+`--db` applies in both MCP server mode and CLI execution modes (`--exec`, `--exec-out`, `--exec-out-append`). If you pass a relative path (for example, `--db test.db`), it is resolved under the default ScriptMCP data directory for your OS.
+
 
 ### Data Directory
 
@@ -387,10 +313,10 @@ Functions are persisted in a SQLite database created on first run. Execution out
 - macOS: `~/Library/Application Support/ScriptMCP/`
 - Linux: `~/.local/share/ScriptMCP/`
 
-| File                  | Purpose                                                                         |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `scriptmcp.db`        | SQLite database of registered functions                                         |
-| `output/` | Timestamped files or append-mode `<function>.txt` files written by `--exec-out` / `--exec-out-append` |
+| File           | Purpose                                                                                               |
+| -------------- | ----------------------------------------------------------------------------------------------------- |
+| `scriptmcp.db` | SQLite database of registered functions                                                               |
+| `output/`      | Timestamped files or append-mode `<function>.txt` files written by `--exec-out` / `--exec-out-append` |
 
 ## Agent Instructions (CLAUDE.md / AGENTS.md)
 

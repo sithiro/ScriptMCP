@@ -5,6 +5,44 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 
+var supportedOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+{
+    "--db",
+    "--exec",
+    "--exec-out",
+    "--exec-out-append"
+};
+
+for (int i = 0; i < args.Length; i++)
+{
+    var arg = args[i];
+    if (!arg.StartsWith("--", StringComparison.Ordinal))
+        continue;
+
+    var optionName = arg;
+    if (arg.StartsWith("--db=", StringComparison.OrdinalIgnoreCase))
+        optionName = "--db";
+    else if (!supportedOptions.Contains(arg))
+    {
+        Console.Error.WriteLine($"Error: unsupported argument '{arg}'. Supported arguments: --db, --exec, --exec-out, --exec-out-append.");
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    if (string.Equals(optionName, "--db", StringComparison.OrdinalIgnoreCase) &&
+        !arg.StartsWith("--db=", StringComparison.OrdinalIgnoreCase))
+    {
+        if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine("Error: --db requires a path value.");
+            Environment.ExitCode = 1;
+            return;
+        }
+
+        i++;
+    }
+}
+
 McpConstants.ResolveSavePath(args);
 Console.InputEncoding = Encoding.UTF8;
 Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -36,11 +74,7 @@ void WriteScheduledTaskOutput(string functionName, string result, bool append)
 // Executes a single dynamic function and exits without starting the MCP server.
 var execIndex = Array.IndexOf(args, "--exec");
 var execOutIndex = Array.IndexOf(args, "--exec-out");
-if (execOutIndex < 0)
-    execOutIndex = Array.IndexOf(args, "--exec_out"); // backward compatibility
 var execOutAppendIndex = Array.IndexOf(args, "--exec-out-append");
-if (execOutAppendIndex < 0)
-    execOutAppendIndex = Array.IndexOf(args, "--exec_out_append"); // backward compatibility
 
 if (execOutAppendIndex >= 0 && execOutAppendIndex + 1 < args.Length)
 {
