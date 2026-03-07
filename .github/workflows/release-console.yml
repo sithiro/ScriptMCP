@@ -105,11 +105,11 @@ jobs:
             local tag="$1"
 
             if gh release view "$tag" --repo "$REPOSITORY" >/dev/null 2>&1; then
-              verify_json="$(gh release verify "$tag" --repo "$REPOSITORY" --format json 2>/dev/null || true)"
-              if [[ -n "$verify_json" ]]; then
+              release_json="$(gh api "/repos/$REPOSITORY/releases/tags/$tag" 2>/dev/null || true)"
+              if [[ -n "$release_json" ]]; then
                 mapfile -t digests < <(
-                  printf '%s' "$verify_json" |
-                    jq -r '.. | objects | .digest? // empty' |
+                  printf '%s' "$release_json" |
+                    jq -r '.assets[]?.digest // empty' |
                     grep '^sha256:' |
                     sort -u
                 )

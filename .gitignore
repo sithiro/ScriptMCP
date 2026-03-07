@@ -12,6 +12,7 @@ ScriptMCP.Plugin/
 commands/
 hooks/
 skills/
+*.binlog
 .*
 **/.*
 !.github/
