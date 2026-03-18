@@ -1,0 +1,25 @@
+{
+  "manifest_version": "0.2",
+  "name": "ScriptMCP",
+  "version": "1.0.0",
+  "description": "A just-in-time scripting engine for creating and executing dynamic functions on the fly.",
+  "author": {
+    "name": "Bill Sithiro",
+    "email": "sithiro@gmail.com",
+    "url": "https://github.com/sithiro"
+  },
+  "repository": "https://github.com/sithiro/ScriptMCP",
+  "homepage": "https://github.com/sithiro/ScriptMCP",
+  "license": "Apache-2.0",
+  "keywords": ["scripting", "automation", "jit", "mcp", "dynamic-functions", ".net", "csharp"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/scriptmcp.exe",
+    "mcp_config": {
+      "command": "${__dirname}/server/scriptmcp.exe",
+      "args": [],
+      "env": {}
+    }
+  },
+  "tools_generated": true
+}

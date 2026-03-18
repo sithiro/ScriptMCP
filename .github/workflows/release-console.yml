@@ -7,6 +7,7 @@ on:
     paths:
       - "ScriptMCP.Console/**"
       - "ScriptMCP.Library/**"
+      - "ScriptMCP.Extension/**"
       - ".github/workflows/release-console.yml"
   workflow_dispatch:
     inputs:
@@ -259,6 +260,30 @@ jobs:
           zip -r scriptmcp-${{ matrix.rid }}-self-contained.zip "ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }}"
           zip -r scriptmcp-${{ matrix.rid }}-framework-dependent.zip "ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }} framework-dependent"
 
+      - name: Package MCPB Extension
+        run: |
+          SELF_CONTAINED_FOLDER="ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }}"
+          MCPB_STAGE="artifacts/mcpb-stage"
+          mkdir -p "$MCPB_STAGE/server"
+
+          # Copy the self-contained binary into the server folder
+          if [[ "${{ matrix.rid }}" == win-* ]]; then
+            BINARY_NAME="scriptmcp.exe"
+            ENTRY_POINT="server/scriptmcp.exe"
+          else
+            BINARY_NAME="scriptmcp"
+            ENTRY_POINT="server/scriptmcp"
+          fi
+          cp "artifacts/$SELF_CONTAINED_FOLDER/$BINARY_NAME" "$MCPB_STAGE/server/"
+
+          # Generate a platform-specific manifest.json with the correct entry_point and version
+          jq --arg ep "$ENTRY_POINT" --arg ver "${{ needs.version.outputs.version }}" \
+            '.server.entry_point = $ep | .server.mcp_config.command = ("${__dirname}/" + $ep) | .version = $ver' \
+            ScriptMCP.Extension/manifest.json > "$MCPB_STAGE/manifest.json"
+
+          cd "$MCPB_STAGE"
+          zip -r "../scriptmcp-${{ matrix.rid }}.mcpb" .
+
       - name: Attest Self-Contained Build Provenance
         uses: actions/attest-build-provenance@v2
         with:
@@ -269,6 +294,11 @@ jobs:
         with:
           subject-path: "artifacts/scriptmcp-${{ matrix.rid }}-framework-dependent.zip"
 
+      - name: Attest MCPB Build Provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "artifacts/scriptmcp-${{ matrix.rid }}.mcpb"
+
       - name: Upload Asset
         env:
           GH_TOKEN: ${{ github.token }}
@@ -276,5 +306,6 @@ jobs:
           gh release upload "${{ needs.version.outputs.tag }}" \
             "artifacts/scriptmcp-${{ matrix.rid }}-self-contained.zip" \
             "artifacts/scriptmcp-${{ matrix.rid }}-framework-dependent.zip" \
+            "artifacts/scriptmcp-${{ matrix.rid }}.mcpb" \
             --repo "${{ github.repository }}" \
             --clobber

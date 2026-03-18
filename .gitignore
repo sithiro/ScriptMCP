@@ -6,7 +6,8 @@ artifacts/
 .release/
 .mcp.json
 ScriptMcp.Server/
-ScriptMCP.Plugin/
+ScriptMCP.Extension/server/
+ScriptMCP.Plugin/.claude-plugin/server/
 **/*.csproj.user
 **/Properties/PublishProfiles/
 commands/
@@ -19,3 +20,5 @@ skills/
 !.github/**
 !.gitignore
 !global.json
+!ScriptMCP.Plugin/.claude-plugin/
+!ScriptMCP.Plugin/.claude-plugin/**
