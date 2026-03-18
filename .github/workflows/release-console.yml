@@ -207,7 +207,7 @@ jobs:
 
           gh release create "${{ needs.version.outputs.tag }}" \
             --repo "${{ github.repository }}" \
-            --title "ScriptMCP ${{ needs.version.outputs.version }}" \
+            --title "ScriptMCP Plugin ${{ needs.version.outputs.version }}" \
             --generate-notes
 
   publish:
@@ -233,7 +233,6 @@ jobs:
       - name: Publish
         run: |
           SELF_CONTAINED_FOLDER="ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }}"
-          FRAMEWORK_DEPENDENT_FOLDER="ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }} framework-dependent"
 
           dotnet publish ScriptMCP.Console/ScriptMCP.Console.csproj \
             -c Release \
@@ -244,24 +243,9 @@ jobs:
             -p:PublishTrimmed=false \
             -o "artifacts/$SELF_CONTAINED_FOLDER"
 
-          dotnet publish ScriptMCP.Console/ScriptMCP.Console.csproj \
-            -c Release \
-            -r ${{ matrix.rid }} \
-            --self-contained false \
-            -p:UseAppHost=true \
-            -p:PublishTrimmed=false \
-            -o "artifacts/$FRAMEWORK_DEPENDENT_FOLDER"
-
           if [[ "${{ matrix.rid }}" != win-* ]]; then
             chmod +x "artifacts/$SELF_CONTAINED_FOLDER/scriptmcp"
-            chmod +x "artifacts/$FRAMEWORK_DEPENDENT_FOLDER/scriptmcp"
           fi
-
-      - name: Package
-        run: |
-          cd artifacts
-          zip -r scriptmcp-${{ matrix.rid }}-self-contained.zip "ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }}"
-          zip -r scriptmcp-${{ matrix.rid }}-framework-dependent.zip "ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }} framework-dependent"
 
       - name: Package MCPB Extension
         run: |
@@ -319,16 +303,6 @@ jobs:
           cd "$PLUGIN_STAGE"
           zip -r "../scriptmcp-${{ matrix.rid }}-plugin.zip" .
 
-      - name: Attest Self-Contained Build Provenance
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: "artifacts/scriptmcp-${{ matrix.rid }}-self-contained.zip"
-
-      - name: Attest Framework-Dependent Build Provenance
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: "artifacts/scriptmcp-${{ matrix.rid }}-framework-dependent.zip"
-
       - name: Attest MCPB Build Provenance
         uses: actions/attest-build-provenance@v2
         with:
@@ -344,8 +318,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ needs.version.outputs.tag }}" \
-            "artifacts/scriptmcp-${{ matrix.rid }}-self-contained.zip" \
-            "artifacts/scriptmcp-${{ matrix.rid }}-framework-dependent.zip" \
             "artifacts/scriptmcp-${{ matrix.rid }}.mcpb" \
             "artifacts/scriptmcp-${{ matrix.rid }}-plugin.zip" \
             --repo "${{ github.repository }}" \
