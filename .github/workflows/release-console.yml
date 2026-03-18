@@ -8,6 +8,7 @@ on:
       - "ScriptMCP.Console/**"
       - "ScriptMCP.Library/**"
       - "ScriptMCP.Extension/**"
+      - "ScriptMCP.Plugin/**"
       - ".github/workflows/release-console.yml"
   workflow_dispatch:
     inputs:
@@ -284,6 +285,37 @@ jobs:
           cd "$MCPB_STAGE"
           zip -r "../scriptmcp-${{ matrix.rid }}.mcpb" .
 
+      - name: Package Claude Code Plugin
+        run: |
+          SELF_CONTAINED_FOLDER="ScriptMCP ${{ needs.version.outputs.version }} ${{ matrix.rid }}"
+          PLUGIN_STAGE="artifacts/plugin-stage"
+
+          # Copy plugin structure
+          cp -r ScriptMCP.Plugin/.claude-plugin "$PLUGIN_STAGE/.claude-plugin"
+          cp -r ScriptMCP.Plugin/commands "$PLUGIN_STAGE/commands"
+          cp -r ScriptMCP.Plugin/hooks "$PLUGIN_STAGE/hooks"
+          cp -r ScriptMCP.Plugin/skills "$PLUGIN_STAGE/skills"
+          mkdir -p "$PLUGIN_STAGE/server"
+
+          # Copy the self-contained binary into the server folder
+          if [[ "${{ matrix.rid }}" == win-* ]]; then
+            BINARY_NAME="scriptmcp.exe"
+            COMMAND='${CLAUDE_PLUGIN_ROOT}/server/scriptmcp.exe'
+          else
+            BINARY_NAME="scriptmcp"
+            COMMAND='${CLAUDE_PLUGIN_ROOT}/server/scriptmcp'
+          fi
+          cp "artifacts/$SELF_CONTAINED_FOLDER/$BINARY_NAME" "$PLUGIN_STAGE/server/"
+
+          # Update plugin.json with the correct command path and version
+          jq --arg cmd "$COMMAND" --arg ver "${{ needs.version.outputs.version }}" \
+            '.mcpServers.scriptmcp.command = $cmd | .version = $ver' \
+            "$PLUGIN_STAGE/.claude-plugin/plugin.json" > "$PLUGIN_STAGE/.claude-plugin/plugin.json.tmp"
+          mv "$PLUGIN_STAGE/.claude-plugin/plugin.json.tmp" "$PLUGIN_STAGE/.claude-plugin/plugin.json"
+
+          cd "$PLUGIN_STAGE"
+          zip -r "../scriptmcp-${{ matrix.rid }}-plugin.zip" .
+
       - name: Attest Self-Contained Build Provenance
         uses: actions/attest-build-provenance@v2
         with:
@@ -299,6 +331,11 @@ jobs:
         with:
           subject-path: "artifacts/scriptmcp-${{ matrix.rid }}.mcpb"
 
+      - name: Attest Plugin Build Provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "artifacts/scriptmcp-${{ matrix.rid }}-plugin.zip"
+
       - name: Upload Asset
         env:
           GH_TOKEN: ${{ github.token }}
@@ -307,5 +344,6 @@ jobs:
             "artifacts/scriptmcp-${{ matrix.rid }}-self-contained.zip" \
             "artifacts/scriptmcp-${{ matrix.rid }}-framework-dependent.zip" \
             "artifacts/scriptmcp-${{ matrix.rid }}.mcpb" \
+            "artifacts/scriptmcp-${{ matrix.rid }}-plugin.zip" \
             --repo "${{ github.repository }}" \
             --clobber
