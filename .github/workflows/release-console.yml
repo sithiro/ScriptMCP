@@ -155,7 +155,9 @@ jobs:
                     sort -u
                 )
 
-                printf '%s\n' "${digests[@]}" >> "$digests_file"
+                if [[ ${#digests[@]} -gt 0 ]]; then
+                  printf '%s\n' "${digests[@]}" >> "$digests_file"
+                fi
               fi
             fi
 
@@ -178,7 +180,7 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "/$attestation_base/delete-request" \
-              --input "$payload_file"
+              --input "$payload_file" || echo "Warning: attestation deletion failed, continuing"
           fi
 
           if [[ -s "$tags_file" ]]; then
