@@ -177,7 +177,7 @@ Agent:  [calls set_database → path="sandbox.db", create=true]
 | `ScriptMCP.Plugin` | Claude Code plugin — slash commands, hooks, skills, and MCP server configuration |
 | `ScriptMCP.Tests` | Unit and integration tests |
 
-`ScriptMCP.Console` and `ScriptMCP.Library` are the MCP server itself. `ScriptMCP.Extension` and `ScriptMCP.Plugin` are distribution wrappers for Claude Desktop and Claude Code respectively.
+`ScriptMCP.Console` and `ScriptMCP.Library` are the MCP server itself. `ScriptMCP.Extension` is a distribution wrapper for Claude Desktop. `ScriptMCP.Plugin` targets Claude Desktop but can also be used with the Claude Code CLI via the `--plugin-dir` argument.
 
 ## Install
 
