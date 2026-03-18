@@ -8,7 +8,7 @@
     "email": "sithiro@gmail.com",
     "url": "https://github.com/sithiro"
   },
-  "repository": "https://github.com/sithiro/ScriptMCP",
+  "repository": { "type": "git", "url": "https://github.com/sithiro/ScriptMCP" },
   "homepage": "https://github.com/sithiro/ScriptMCP",
   "license": "Apache-2.0",
   "keywords": ["scripting", "automation", "jit", "mcp", "dynamic-functions", ".net", "csharp"],
