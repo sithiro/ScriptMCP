@@ -250,6 +250,30 @@ Each scheduled execution either writes a new file named like `<function>_YYMMDD_
 
 `get_database`, `set_database`, `delete_database`, `read_scheduled_task`, `create_scheduled_task`, `delete_scheduled_task`, `list_scheduled_tasks`, `start_scheduled_task`, and `stop_scheduled_task` are **native MCP tools** — they do not appear in `list_dynamic_functions` and do not need inspection before use. Call them directly.
 
+## Recognizing Implied Function Calls
+
+Users who have previously created dynamic functions will often request their execution without using explicit terms like "run" or "call". They reference the function's purpose or output directly. You must recognize these implicit requests and match them to existing dynamic functions.
+
+**How to handle it:**
+
+1. Call `list_dynamic_functions` if you haven't already in this conversation
+2. Match the user's intent to one or more candidate functions by name and description
+3. If exactly one function matches, inspect it and call it
+4. If multiple functions could match, ask the user to clarify
+
+**Examples of implied execution:**
+
+| User says | Likely function | Why |
+|-----------|----------------|-----|
+| "what's bitcoin at right now?" | `get_btc_price` | Asking for a price they've fetched before |
+| "convert 50 dollars to euros" | `usd_to_eur` | Describing the function's exact purpose |
+| "show me the market overview" | `market_fast_fancy` or similar | Referencing a dashboard they built |
+| "how's my portfolio doing?" | `portfolio` | Referring to a function by its domain |
+| "check cpu usage" | `get_cpu_utilization` | Describing the metric, not the function |
+| "what time is it?" | `get_time` | Trivial query that maps to a known function |
+
+The key signal is that the user's request maps directly to what a registered function does, even though they never mention the function by name. Always prefer calling an existing dynamic function over using other tools or web search when the match is clear.
+
 ## Best Practices
 
 1. **Always list functions first** — call `list_dynamic_functions` at conversation start to discover available tools
