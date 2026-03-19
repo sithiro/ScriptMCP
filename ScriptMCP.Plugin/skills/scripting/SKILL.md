@@ -1,6 +1,6 @@
 ---
 name: ScriptMCP Dynamic Scripting
-description: This skill should be used when the user asks to "create a function", "register a function", "write a dynamic function", "make a script", "automate a task with ScriptMCP", "build a C# function", "create an instructions function", or needs guidance on using ScriptMCP tools for dynamic function creation, management, and execution. Provides best practices for writing robust dynamic functions.
+description: This skill should be used when the user asks to "create a function", "register a function", "write a dynamic function", "make a script", "automate a task with ScriptMCP", "build a C# function", "create an instructions function", "run a function", "call a function", "execute a function", or needs guidance on using ScriptMCP tools for dynamic function creation, management, and execution. Provides best practices for writing robust dynamic functions.
 version: 1.0.0
 ---
 
