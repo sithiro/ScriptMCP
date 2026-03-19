@@ -1,8 +1,12 @@
 ---
-description: Delete a ScriptMCP scheduled task
-argument-hint: <function-name>
-allowed-tools: ["mcp__scriptmcp__delete_scheduled_task", "AskUserQuestion"]
+name: task-delete
+description: >-
+  This skill should be used when the user asks to delete a scheduled task, remove a scheduled task,
+  or wants to delete a ScriptMCP scheduled task.
+version: 1.0.0
 ---
+
+# Delete a ScriptMCP Scheduled Task
 
 Delete a scheduled task created by ScriptMCP.
 

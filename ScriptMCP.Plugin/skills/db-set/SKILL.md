@@ -1,8 +1,12 @@
 ---
-description: Switch the active ScriptMCP database
-argument-hint: <path-or-name>
-allowed-tools: ["mcp__scriptmcp__set_database", "AskUserQuestion"]
+name: db-set
+description: >-
+  This skill should be used when the user asks to switch database, change database, use a different database,
+  or wants to switch the active ScriptMCP database.
+version: 1.0.0
 ---
+
+# Switch the Active ScriptMCP Database
 
 Switch the active ScriptMCP database.
 

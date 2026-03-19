@@ -1,8 +1,12 @@
 ---
-description: Start a ScriptMCP scheduled task
-argument-hint: <function-name>
-allowed-tools: ["mcp__scriptmcp__start_scheduled_task", "AskUserQuestion"]
+name: task-start
+description: >-
+  This skill should be used when the user asks to start a scheduled task, enable a scheduled task, resume a task,
+  or wants to start a ScriptMCP scheduled task.
+version: 1.0.0
 ---
+
+# Start a ScriptMCP Scheduled Task
 
 Start or enable a ScriptMCP scheduled task.
 

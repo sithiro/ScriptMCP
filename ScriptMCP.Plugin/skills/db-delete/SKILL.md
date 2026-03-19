@@ -1,8 +1,12 @@
 ---
-description: Delete a non-default ScriptMCP database
-argument-hint: <path-or-name>
-allowed-tools: ["mcp__scriptmcp__delete_database", "AskUserQuestion"]
+name: db-delete
+description: >-
+  This skill should be used when the user asks to delete a database, remove a database, or wants to delete
+  a non-default ScriptMCP database.
+version: 1.0.0
 ---
+
+# Delete a ScriptMCP Database
 
 Delete a ScriptMCP database file.
 

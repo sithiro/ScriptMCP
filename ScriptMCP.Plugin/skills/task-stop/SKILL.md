@@ -1,8 +1,12 @@
 ---
-description: Stop a ScriptMCP scheduled task
-argument-hint: <function-name>
-allowed-tools: ["mcp__scriptmcp__stop_scheduled_task", "AskUserQuestion"]
+name: task-stop
+description: >-
+  This skill should be used when the user asks to stop a scheduled task, disable a scheduled task, pause a task,
+  or wants to stop a ScriptMCP scheduled task.
+version: 1.0.0
 ---
+
+# Stop a ScriptMCP Scheduled Task
 
 Stop or disable a ScriptMCP scheduled task.
 

@@ -1,8 +1,12 @@
 ---
-description: Manage ScriptMCP scheduled tasks
-argument-hint: <function-name>
-allowed-tools: ["mcp__scriptmcp__create_scheduled_task", "mcp__scriptmcp__read_scheduled_task", "mcp__scriptmcp__delete_scheduled_task", "mcp__scriptmcp__list_scheduled_tasks", "mcp__scriptmcp__start_scheduled_task", "mcp__scriptmcp__stop_scheduled_task", "AskUserQuestion"]
+name: task-create
+description: >-
+  This skill should be used when the user asks to schedule a function, create a scheduled task, run on a schedule,
+  set up recurring execution, or wants to manage ScriptMCP scheduled tasks (create, read, list, start, stop, or delete).
+version: 1.0.0
 ---
+
+# Manage ScriptMCP Scheduled Tasks
 
 Manage scheduled tasks created by ScriptMCP.
 
@@ -10,39 +14,34 @@ If an argument was provided ($ARGUMENTS), use it as the function name. Otherwise
 
 Determine whether the user wants to create a task, read the latest task output, list tasks, start a task, stop a task, or delete a task.
 
-For create:
+## Create
+
 - Ask for the interval in minutes if it is not already clear.
 - Ask for JSON arguments if the function needs them. Otherwise use `"{}"`.
 - Ask whether the user wants append mode. Default to `false` if not specified.
-- Call `create_scheduled_task` with:
-  - `function_name`
-  - `function_args`
-  - `interval_minutes`
-  - `append`
+- Call `create_scheduled_task` with `function_name`, `function_args`, `interval_minutes`, `append`.
 
-For read:
-- Call `read_scheduled_task` with:
-  - `function_name`
+## Read
 
-For list:
+- Call `read_scheduled_task` with `function_name`.
+
+## List
+
 - Call `list_scheduled_tasks` with no arguments.
 
-For start:
-- Ask for the interval in minutes if it is not already clear.
-- Call `start_scheduled_task` with:
-  - `function_name`
-  - `interval_minutes`
+## Start
 
-For stop:
 - Ask for the interval in minutes if it is not already clear.
-- Call `stop_scheduled_task` with:
-  - `function_name`
-  - `interval_minutes`
+- Call `start_scheduled_task` with `function_name`, `interval_minutes`.
 
-For delete:
+## Stop
+
 - Ask for the interval in minutes if it is not already clear.
-- Call `delete_scheduled_task` with:
-  - `function_name`
-  - `interval_minutes`
+- Call `stop_scheduled_task` with `function_name`, `interval_minutes`.
+
+## Delete
+
+- Ask for the interval in minutes if it is not already clear.
+- Call `delete_scheduled_task` with `function_name`, `interval_minutes`.
 
 Only perform the scheduled-task action the user requested.

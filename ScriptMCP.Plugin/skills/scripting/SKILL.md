@@ -1,6 +1,11 @@
 ---
-name: smcp
-description: This skill should be used when the user asks to "create a function", "register a function", "write a dynamic function", "make a script", "automate a task with ScriptMCP", "build a C# function", "create an instructions function", or when the user implies the execution of a dynamic function that may have been previously created by them, or needs guidance on using ScriptMCP tools for dynamic function creation, management, and execution. Provides best practices for writing robust dynamic functions.
+name: scripting
+description: >-
+  This skill should be used when the user asks to create a function, register a function, write a dynamic function,
+  make a script, automate a task with ScriptMCP, build a C# function, create an instructions function, or when the
+  user implies the execution of a dynamic function that may have been previously created by them, or needs guidance
+  on using ScriptMCP tools for dynamic function creation, management, and execution. Provides best practices for
+  writing robust dynamic functions.
 version: 1.0.0
 ---
 
@@ -14,25 +19,25 @@ Provide guidance for creating, managing, and executing dynamic functions through
 
 ScriptMCP exposes these MCP tools:
 
-| Tool | Purpose |
-|------|---------|
-| `list_dynamic_functions` | Discover all registered functions |
-| `register_dynamic_function` | Create a new function |
-| `update_dynamic_function` | Modify a single field on an existing function |
-| `inspect_dynamic_function` | View metadata, parameters, and optionally source |
-| `call_dynamic_function` | Execute a function in-process |
-| `call_dynamic_process` | Execute a function out-of-process (isolated, parallel) |
-| `compile_dynamic_function` | Recompile a code function |
-| `delete_dynamic_function` | Remove a function |
-| `get_database` | Return the currently active ScriptMCP database path |
-| `set_database` | Switch the active ScriptMCP database at runtime |
-| `delete_database` | Delete a non-default ScriptMCP database after confirmation |
-| `read_scheduled_task` | Read the latest scheduled-task output file for a function |
-| `create_scheduled_task` | Create a scheduled task (Windows Task Scheduler or cron) for a dynamic function |
-| `delete_scheduled_task` | Delete a scheduled task for a dynamic function |
-| `list_scheduled_tasks` | List ScriptMCP scheduled tasks |
-| `start_scheduled_task` | Enable and start a scheduled task |
-| `stop_scheduled_task` | Disable a scheduled task |
+| Tool                        | Purpose                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| `list_dynamic_functions`    | Discover all registered functions                                               |
+| `register_dynamic_function` | Create a new function                                                           |
+| `update_dynamic_function`   | Modify a single field on an existing function                                   |
+| `inspect_dynamic_function`  | View metadata, parameters, and optionally source                                |
+| `call_dynamic_function`     | Execute a function in-process                                                   |
+| `call_dynamic_process`      | Execute a function out-of-process (isolated, parallel)                          |
+| `compile_dynamic_function`  | Recompile a code function                                                       |
+| `delete_dynamic_function`   | Remove a function                                                               |
+| `get_database`              | Return the currently active ScriptMCP database path                             |
+| `set_database`              | Switch the active ScriptMCP database at runtime                                 |
+| `delete_database`           | Delete a non-default ScriptMCP database after confirmation                      |
+| `read_scheduled_task`       | Read the latest scheduled-task output file for a function                       |
+| `create_scheduled_task`     | Create a scheduled task (Windows Task Scheduler or cron) for a dynamic function |
+| `delete_scheduled_task`     | Delete a scheduled task for a dynamic function                                  |
+| `list_scheduled_tasks`      | List ScriptMCP scheduled tasks                                                  |
+| `start_scheduled_task`      | Enable and start a scheduled task                                               |
+| `stop_scheduled_task`       | Disable a scheduled task                                                        |
 
 ## Function Types
 
@@ -57,6 +62,7 @@ Write only the method body — no class or method signature. Must return a strin
 Plain English instructions with `{paramName}` placeholder substitution. When called, the instructions are returned for Claude to read and follow — the raw text is not shown to the user.
 
 Use instructions functions for:
+
 - Guided workflows and checklists
 - Response formatting templates
 - Multi-step procedures that combine multiple tools
@@ -90,6 +96,7 @@ try {
 ### Common Patterns
 
 **HTTP requests:**
+
 ```csharp
 var client = new HttpClient();
 client.DefaultRequestHeaders.Add("User-Agent", "ScriptMCP");
@@ -98,6 +105,7 @@ return json;
 ```
 
 **File operations:**
+
 ```csharp
 var content = File.ReadAllText(path);
 // process content
@@ -105,6 +113,7 @@ return result;
 ```
 
 **JSON processing:**
+
 ```csharp
 var doc = System.Text.Json.JsonDocument.Parse(jsonString);
 var root = doc.RootElement;
@@ -113,6 +122,7 @@ return output;
 ```
 
 **Process execution:**
+
 ```csharp
 var psi = new System.Diagnostics.ProcessStartInfo("cmd", "/c dir") {
     RedirectStandardOutput = true,
@@ -138,6 +148,7 @@ Code functions can invoke other dynamic functions:
 ### Functions WITHOUT Output Instructions
 
 Return the function output verbatim. Do NOT:
+
 - Add commentary, labels, or explanations around it
 - Summarize, paraphrase, or reword it
 - Wrap it in code blocks or markdown formatting
@@ -177,6 +188,7 @@ Use `set_database` to switch databases during a live session:
 - **create** (default `false`): Must be set to `true` to create a missing database after user confirmation
 
 Rules:
+
 - If `path` is omitted, ScriptMCP switches to the default database
 - If `path` is only a file name like `sandbox.db`, it resolves under the default ScriptMCP data directory
 - If the target database does not exist, do not create it silently; ask the user and then call `set_database` again with `create=true` if they approve
@@ -187,6 +199,7 @@ Use `delete_database` to remove a database file:
 - **confirm** (default `false`): Must be set to `true` after explicit user confirmation
 
 Rules:
+
 - Never call `delete_database` without explicit confirmation from the user
 - The default ScriptMCP database cannot be deleted
 - If the target database is currently active, ScriptMCP switches to the default database before deletion
@@ -203,6 +216,7 @@ Use `create_scheduled_task` to run a dynamic function on a recurring schedule:
 - **append** (default `false`): When true, append to `<function>.txt` instead of creating a new timestamped file each run
 
 Ask the user whether they want:
+
 - a unique output file per run
 - or a single output file reused across runs
 
@@ -263,14 +277,14 @@ Users who have previously created dynamic functions will often request their exe
 
 **Examples of implied execution:**
 
-| User says | Likely function | Why |
-|-----------|----------------|-----|
-| "what's bitcoin at right now?" | `get_btc_price` | Asking for a price they've fetched before |
-| "convert 50 dollars to euros" | `usd_to_eur` | Describing the function's exact purpose |
-| "show me the market overview" | `market_fast_fancy` or similar | Referencing a dashboard they built |
-| "how's my portfolio doing?" | `portfolio` | Referring to a function by its domain |
-| "check cpu usage" | `get_cpu_utilization` | Describing the metric, not the function |
-| "what time is it?" | `get_time` | Trivial query that maps to a known function |
+| User says                      | Likely function                | Why                                         |
+| ------------------------------ | ------------------------------ | ------------------------------------------- |
+| "what's bitcoin at right now?" | `get_btc_price`                | Asking for a price they've fetched before   |
+| "convert 50 dollars to euros"  | `usd_to_eur`                   | Describing the function's exact purpose     |
+| "show me the market overview"  | `market_fast_fancy` or similar | Referencing a dashboard they built          |
+| "how's my portfolio doing?"    | `portfolio`                    | Referring to a function by its domain       |
+| "check cpu usage"              | `get_cpu_utilization`          | Describing the metric, not the function     |
+| "what time is it?"             | `get_time`                     | Trivial query that maps to a known function |
 
 The key signal is that the user's request maps directly to what a registered function does, even though they never mention the function by name. Always prefer calling an existing dynamic function over using other tools or web search when the match is clear.
 
@@ -295,4 +309,5 @@ Functions are automatically persisted to SQLite on registration. No manual save 
 ## Additional Resources
 
 For detailed C# scripting patterns and advanced use cases, consult:
+
 - **`references/csharp-patterns.md`** — Common C# code patterns for dynamic functions
