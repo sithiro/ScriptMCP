@@ -22,7 +22,7 @@
     <ExtensionPublishRid Condition="'$(ExtensionPublishRid)' == ''">win-x64</ExtensionPublishRid>
   </PropertyGroup>
 
-  <Target Name="PublishExtensionServer" AfterTargets="Build" Condition="'$(ScriptMcpSkipExtensionPublish)' != 'true'">
+  <Target Name="PublishExtensionServer" AfterTargets="Build" Condition="'$(ScriptMcpSkipExtensionPublish)' != 'true' And '$(CI)' != 'true' And '$(RuntimeIdentifier)' == ''">
     <Message Importance="high" Text="Publishing self-contained ScriptMCP.Console to $(ExtensionServerDir)" />
     <MakeDir Directories="$(ExtensionServerDir)" />
     <RemoveDir Directories="$(ExtensionServerDir)" />

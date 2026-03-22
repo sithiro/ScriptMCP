@@ -241,6 +241,7 @@ jobs:
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
             -p:PublishTrimmed=false \
+            -p:ScriptMcpSkipExtensionPublish=true \
             -o "artifacts/$SELF_CONTAINED_FOLDER"
 
           if [[ "${{ matrix.rid }}" != win-* ]]; then
@@ -279,7 +280,6 @@ jobs:
           # Copy plugin structure
           mkdir -p "$PLUGIN_STAGE"
           cp -r ScriptMCP.Plugin/.claude-plugin "$PLUGIN_STAGE/.claude-plugin"
-          cp -r ScriptMCP.Plugin/commands "$PLUGIN_STAGE/commands"
           cp -r ScriptMCP.Plugin/hooks "$PLUGIN_STAGE/hooks"
           cp -r ScriptMCP.Plugin/skills "$PLUGIN_STAGE/skills"
           mkdir -p "$PLUGIN_STAGE/server"
