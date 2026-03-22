@@ -78,9 +78,7 @@ Scripts can include optional **output instructions** that tell the AI how to for
 
 ## Examples
 
-### Short top-level C# examples
-
-Hello world:
+### HelloWorld.cs
 
 ```csharp
 using System;
@@ -88,19 +86,16 @@ using System;
 Console.WriteLine("Hello, world!");
 ```
 
-Program class and Main method example (the older style in Microsoft’s console-template docs):
-
-```csharp
-using System;
-
-class Program
-{
-    static void Main(string[] args)
-    {
-        Console.WriteLine("Hello from Main.");
-    }
-}
 ```
+You:    load HelloWorld.cs
+Agent:  [calls load_script → path="HelloWorld.cs"]
+        Script 'HelloWorld' loaded from 'HelloWorld.cs' and created.
+
+You:    say hello
+Agent:  Hello, world!
+```
+
+### Fibonacci.cs
 
 Fibonacci from the JSON payload in `args[0]`:
 
@@ -132,6 +127,15 @@ static long Fibonacci(int value)
 Console.WriteLine(Fibonacci(n));
 ```
 
+```
+You:    load Fibonacci.cs
+Agent:  [calls load_script → path="Fibonacci.cs"]
+        Script 'Fibonacci' loaded from 'Fibonacci.cs' and created.
+
+You:    calculate fibonacci for 12
+Agent:  144
+```
+
 ### Let the AI create a script for you
 
 Just describe what you need in natural language — the AI writes the C# code, creates the script, and calls it:
@@ -144,15 +148,21 @@ You:    what time is it?
 Agent:  10:07:39 pm
 ```
 
-### HTTP JSON fetch
+### Load a script from a file
+
+`load_script` is the main file-based workflow. It creates the script if it does not exist yet, or updates the stored script from the file if it already exists.
 
 ```
-You:    create a script that fetches a JSON endpoint and returns the top-level keys
-Agent:  [creates json_keys → fetches via HttpClient, parses with System.Text.Json]
+You:    load the script from C:\work\weather.cs
+Agent:  [calls load_script → path="C:\work\weather.cs"]
+        Script 'weather' loaded from 'C:\work\weather.cs' and created.
 
-You:    run json_keys on https://api.example.com/status
-Agent:  status, version, uptime
+You:    i changed the file, load it again
+Agent:  [calls load_script → path="C:\work\weather.cs"]
+        Script 'weather' loaded from 'C:\work\weather.cs' and updated.
 ```
+
+This is useful when you want to author a script in VS Code, keep the source on disk, and sync it back into ScriptMCP for compilation and execution.
 
 ### Instructions-type scripts
 
