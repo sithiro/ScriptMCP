@@ -1,4 +1,4 @@
-# C# Code Patterns for ScriptMCP Dynamic Functions
+# C# Code Patterns for ScriptMCP Scripts
 
 ## Environment
 
@@ -197,20 +197,20 @@ var utc = DateTime.UtcNow;
 return $"Local: {now:yyyy-MM-dd HH:mm:ss}\nUTC: {utc:yyyy-MM-dd HH:mm:ss}";
 ```
 
-## Inter-Function Calling
+## Inter-Script Calling
 
 ### Synchronous Call
 
 ```csharp
-// Call another dynamic function and use its result
+// Call another script and use its result
 var result = ScriptMCP.Call("other_function", "{\"param\": \"value\"}");
-return $"Other function returned: {result}";
+return $"Other script returned: {result}";
 ```
 
 ### Parallel Execution
 
 ```csharp
-// Launch multiple functions in parallel
+// Launch multiple scripts in parallel
 var proc1 = ScriptMCP.Proc("func_a", "{}");
 var proc2 = ScriptMCP.Proc("func_b", "{}");
 var output1 = proc1.StandardOutput.ReadToEnd();
@@ -224,9 +224,9 @@ return $"A: {output1}\nB: {output2}";
 
 ### Create a Scheduled Task (Native Tool)
 
-Call `create_scheduled_task` directly — it is a native MCP tool, not a dynamic function:
+Call `create_scheduled_task` directly — it is a native MCP tool, not a script:
 
-- `function_name`: name of the dynamic function to run
+- `function_name`: name of the script to run
 - `function_args`: JSON arguments (default `"{}"`)
 - `interval_minutes`: recurrence interval
 - `append`: when true, append to `<function>.txt` instead of creating a new timestamped file per run
@@ -258,13 +258,13 @@ Call `stop_scheduled_task` directly to disable a task:
 
 ### Read Exec Output (Native Tool)
 
-Call `read_scheduled_task` directly to read the result written for a function by scheduled tasks or `--exec-out` / `--exec-out-append`:
+Call `read_scheduled_task` directly to read the result written for a script by scheduled tasks or `--exec-out` / `--exec-out-append`:
 
 - `function_name`: required, returns `<function>.txt` if append mode is active; otherwise the latest matching timestamped file
 
-### Writing Functions for Scheduled Use
+### Writing Scripts for Scheduled Use
 
-Functions intended for scheduled execution should be self-contained and return meaningful output, since the result is captured to the output file:
+Scripts intended for scheduled execution should be self-contained and return meaningful output, since the result is captured to the output file:
 
 ```csharp
 // Good: returns a meaningful result string

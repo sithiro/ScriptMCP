@@ -2,23 +2,23 @@ using ScriptMCP.Library;
 
 namespace ScriptMCP.Tests;
 
-[Collection("DynamicTools tests")]
-public sealed class DynamicToolsDatabaseTests
+[Collection("ScriptTools tests")]
+public sealed class ScriptToolsDatabaseTests
 {
     private readonly TestDatabaseFixture _fixture;
-    private readonly DynamicTools _tools;
+    private readonly ScriptTools _tools;
 
-    public DynamicToolsDatabaseTests(TestDatabaseFixture fixture)
+    public ScriptToolsDatabaseTests(TestDatabaseFixture fixture)
     {
         _fixture = fixture;
-        _tools = new DynamicTools();
+        _tools = new ScriptTools();
     }
 
     [Fact]
     public void RegistersAndExecutesFunctionUsingDedicatedTestDatabaseFile()
     {
         var name = UniqueName("test_add_two_numbers");
-        var registerResult = _tools.RegisterDynamicFunction(
+        var registerResult = _tools.CreateScript(
             name: name,
             description: "Adds two integers.",
             parameters: """[{"name":"x","type":"int","description":"first"},{"name":"y","type":"int","description":"second"}]""",
@@ -26,13 +26,13 @@ public sealed class DynamicToolsDatabaseTests
             functionType: "code",
             outputInstructions: "");
 
-        Assert.Contains("registered successfully", registerResult, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("created successfully", registerResult, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(_fixture.DatabasePath));
 
-        var listResult = _tools.ListDynamicFunctions();
+        var listResult = _tools.ListScripts();
         Assert.Contains(name, listResult, StringComparison.Ordinal);
 
-        var callResult = _tools.CallDynamicFunction(name, """{"x":2,"y":3}""");
+        var callResult = _tools.CallScript(name, """{"x":2,"y":3}""");
         Assert.Equal("5", callResult);
     }
 
@@ -40,7 +40,7 @@ public sealed class DynamicToolsDatabaseTests
     public void InspectSupportsBasicAndFullInspectionModes()
     {
         var name = UniqueName("test_inspect");
-        _tools.RegisterDynamicFunction(
+        _tools.CreateScript(
             name: name,
             description: "Inspect me.",
             parameters: """[{"name":"x","type":"int","description":"value"}]""",
@@ -48,13 +48,13 @@ public sealed class DynamicToolsDatabaseTests
             functionType: "code",
             outputInstructions: "return exactly");
 
-        var basic = _tools.InspectDynamicFunction(name);
-        Assert.Contains($"Function: {name}", basic, StringComparison.Ordinal);
+        var basic = _tools.InspectScript(name);
+        Assert.Contains($"Script: {name}", basic, StringComparison.Ordinal);
         Assert.DoesNotContain("Compiled:", basic, StringComparison.Ordinal);
         Assert.DoesNotContain("Source (C# Code):", basic, StringComparison.Ordinal);
         Assert.Contains("Output Instructions: return exactly", basic, StringComparison.Ordinal);
 
-        var full = _tools.InspectDynamicFunction(name, fullInspection: true);
+        var full = _tools.InspectScript(name, fullInspection: true);
         Assert.Contains("Compiled:    Yes", full, StringComparison.Ordinal);
         Assert.Contains("Source (C# Code):", full, StringComparison.Ordinal);
     }
@@ -63,7 +63,7 @@ public sealed class DynamicToolsDatabaseTests
     public void UpdateBodyRecompilesAndChangesBehavior()
     {
         var name = UniqueName("test_update");
-        _tools.RegisterDynamicFunction(
+        _tools.CreateScript(
             name: name,
             description: "Math function.",
             parameters: """[{"name":"x","type":"int","description":"first"},{"name":"y","type":"int","description":"second"}]""",
@@ -71,13 +71,13 @@ public sealed class DynamicToolsDatabaseTests
             functionType: "code",
             outputInstructions: "");
 
-        var before = _tools.CallDynamicFunction(name, """{"x":2,"y":3}""");
+        var before = _tools.CallScript(name, """{"x":2,"y":3}""");
         Assert.Equal("5", before);
 
-        var update = _tools.UpdateDynamicFunction(name, "body", "return (x * y).ToString();");
+        var update = _tools.UpdateScript(name, "body", "return (x * y).ToString();");
         Assert.Contains("updated successfully: body", update, StringComparison.OrdinalIgnoreCase);
 
-        var after = _tools.CallDynamicFunction(name, """{"x":2,"y":3}""");
+        var after = _tools.CallScript(name, """{"x":2,"y":3}""");
         Assert.Equal("6", after);
     }
 
@@ -87,16 +87,16 @@ public sealed class DynamicToolsDatabaseTests
         var first = UniqueName("test_cycle_first");
         var second = UniqueName("test_cycle_second");
 
-        var firstRegister = _tools.RegisterDynamicFunction(
+        var firstRegister = _tools.CreateScript(
             name: first,
             description: "Calls the second function.",
             parameters: "[]",
             body: $$"""return ScriptMCP.Call("{{second}}");""",
             functionType: "code",
             outputInstructions: "");
-        Assert.Contains("registered successfully", firstRegister, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("created successfully", firstRegister, StringComparison.OrdinalIgnoreCase);
 
-        var secondRegister = _tools.RegisterDynamicFunction(
+        var secondRegister = _tools.CreateScript(
             name: second,
             description: "Calls the first function.",
             parameters: "[]",
@@ -104,7 +104,7 @@ public sealed class DynamicToolsDatabaseTests
             functionType: "code",
             outputInstructions: "");
 
-        Assert.Contains("Registration failed: direct circular dependency detected", secondRegister, StringComparison.Ordinal);
+        Assert.Contains("Creation failed: direct circular dependency detected", secondRegister, StringComparison.Ordinal);
         Assert.Contains($"{second} <-> {first}", secondRegister, StringComparison.Ordinal);
     }
 
@@ -114,25 +114,25 @@ public sealed class DynamicToolsDatabaseTests
         var first = UniqueName("test_cycle_update_first");
         var second = UniqueName("test_cycle_update_second");
 
-        var firstRegister = _tools.RegisterDynamicFunction(
+        var firstRegister = _tools.CreateScript(
             name: first,
             description: "Calls the second function.",
             parameters: "[]",
             body: $$"""return ScriptMCP.Call("{{second}}");""",
             functionType: "code",
             outputInstructions: "");
-        Assert.Contains("registered successfully", firstRegister, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("created successfully", firstRegister, StringComparison.OrdinalIgnoreCase);
 
-        var secondRegister = _tools.RegisterDynamicFunction(
+        var secondRegister = _tools.CreateScript(
             name: second,
             description: "Does not call anything.",
             parameters: "[]",
             body: """return "ok";""",
             functionType: "code",
             outputInstructions: "");
-        Assert.Contains("registered successfully", secondRegister, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("created successfully", secondRegister, StringComparison.OrdinalIgnoreCase);
 
-        var update = _tools.UpdateDynamicFunction(
+        var update = _tools.UpdateScript(
             second,
             "body",
             $$"""return ScriptMCP.Call("{{first}}");""");
@@ -140,7 +140,7 @@ public sealed class DynamicToolsDatabaseTests
         Assert.Contains("Update failed: direct circular dependency detected", update, StringComparison.Ordinal);
         Assert.Contains($"{second} <-> {first}", update, StringComparison.Ordinal);
 
-        var inspect = _tools.InspectDynamicFunction(second);
+        var inspect = _tools.InspectScript(second);
         Assert.Contains("Depends on:  (none)", inspect, StringComparison.Ordinal);
     }
 
@@ -148,7 +148,7 @@ public sealed class DynamicToolsDatabaseTests
     public void UpdateWithInvalidFieldReturnsError()
     {
         var name = UniqueName("test_update_error");
-        _tools.RegisterDynamicFunction(
+        _tools.CreateScript(
             name: name,
             description: "No-op",
             parameters: "[]",
@@ -156,15 +156,15 @@ public sealed class DynamicToolsDatabaseTests
             functionType: "code",
             outputInstructions: "");
 
-        var result = _tools.UpdateDynamicFunction(name, "not_a_field", "x");
+        var result = _tools.UpdateScript(name, "not_a_field", "x");
         Assert.Contains("Update failed:", result, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void CallDynamicFunctionAppendsOutputInstructionsSuffix()
+    public void CallScriptAppendsOutputInstructionsSuffix()
     {
         var name = UniqueName("test_output_instructions");
-        _tools.RegisterDynamicFunction(
+        _tools.CreateScript(
             name: name,
             description: "Has output instructions.",
             parameters: "[]",
@@ -172,15 +172,15 @@ public sealed class DynamicToolsDatabaseTests
             functionType: "code",
             outputInstructions: "render as markdown table");
 
-        var output = _tools.CallDynamicFunction(name, "{}");
+        var output = _tools.CallScript(name, "{}");
         Assert.Contains("payload", output, StringComparison.Ordinal);
         Assert.Contains("[Output Instructions]: render as markdown table", output, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void CallDynamicProcessRejectsUnknownOutputMode()
+    public void CallProcessRejectsUnknownOutputMode()
     {
-        var result = _tools.CallDynamicProcess("anything", "{}", "BogusMode");
+        var result = _tools.CallProcess("anything", "{}", "BogusMode");
         Assert.Equal("Error: invalid output_mode. Supported values: Default, WriteNew, WriteAppend.", result);
     }
 
@@ -190,11 +190,11 @@ public sealed class DynamicToolsDatabaseTests
         ResetOutputDirectory();
         var name = UniqueName("test_read_scheduled");
 
-        var timestampPath = DynamicTools.GetScheduledTaskOutputPath(name, new DateTime(2026, 01, 01, 0, 0, 0, DateTimeKind.Utc));
+        var timestampPath = ScriptTools.GetScheduledTaskOutputPath(name, new DateTime(2026, 01, 01, 0, 0, 0, DateTimeKind.Utc));
         File.WriteAllText(timestampPath, "timestamp-result");
         File.SetLastWriteTimeUtc(timestampPath, new DateTime(2026, 01, 01, 0, 0, 0, DateTimeKind.Utc));
 
-        var appendPath = DynamicTools.GetScheduledTaskAppendOutputPath(name);
+        var appendPath = ScriptTools.GetScheduledTaskAppendOutputPath(name);
         File.WriteAllText(appendPath, "append-result");
         File.SetLastWriteTimeUtc(appendPath, new DateTime(2026, 01, 02, 0, 0, 0, DateTimeKind.Utc));
 
@@ -215,13 +215,13 @@ public sealed class DynamicToolsDatabaseTests
     [Fact]
     public void GetDatabaseReturnsCurrentSavePath()
     {
-        Assert.Equal(DynamicTools.SavePath, _tools.GetDatabase());
+        Assert.Equal(ScriptTools.SavePath, _tools.GetDatabase());
     }
 
     [Fact]
     public void SetDatabaseRejectsCreatingMissingDatabaseWithoutConfirmation()
     {
-        var originalPath = DynamicTools.SavePath;
+        var originalPath = ScriptTools.SavePath;
         var databaseName = UniqueName("missing-db");
         var expectedPath = GetDefaultDatabasePath(databaseName);
 
@@ -234,7 +234,7 @@ public sealed class DynamicToolsDatabaseTests
 
             Assert.Contains("Database does not exist:", result, StringComparison.Ordinal);
             Assert.Contains(expectedPath, result, StringComparison.Ordinal);
-            Assert.Equal(originalPath, DynamicTools.SavePath);
+            Assert.Equal(originalPath, ScriptTools.SavePath);
             Assert.False(File.Exists(expectedPath));
         }
         finally
@@ -246,7 +246,7 @@ public sealed class DynamicToolsDatabaseTests
     [Fact]
     public void SetDatabaseCreatesAndSwitchesToNamedDatabaseWhenConfirmed()
     {
-        var originalPath = DynamicTools.SavePath;
+        var originalPath = ScriptTools.SavePath;
         var databaseName = UniqueName("created-db");
         var expectedPath = GetDefaultDatabasePath(databaseName);
 
@@ -259,7 +259,7 @@ public sealed class DynamicToolsDatabaseTests
 
             Assert.Contains("Switched database from:", result, StringComparison.Ordinal);
             Assert.Contains(expectedPath, result, StringComparison.Ordinal);
-            Assert.Equal(expectedPath, DynamicTools.SavePath);
+            Assert.Equal(expectedPath, ScriptTools.SavePath);
             Assert.True(File.Exists(expectedPath));
             Assert.Equal(expectedPath, _tools.GetDatabase());
         }
@@ -272,7 +272,7 @@ public sealed class DynamicToolsDatabaseTests
     [Fact]
     public void DeleteDatabaseRequiresConfirmationBeforeDeleting()
     {
-        var originalPath = DynamicTools.SavePath;
+        var originalPath = ScriptTools.SavePath;
         var databaseName = UniqueName("delete-db");
         var databasePath = GetDefaultDatabasePath(databaseName);
 
@@ -290,7 +290,7 @@ public sealed class DynamicToolsDatabaseTests
             Assert.Contains(databasePath, result, StringComparison.Ordinal);
             Assert.Contains("Say yes or no.", result, StringComparison.Ordinal);
             Assert.True(File.Exists(databasePath));
-            Assert.Equal(databasePath, DynamicTools.SavePath);
+            Assert.Equal(databasePath, ScriptTools.SavePath);
         }
         finally
         {
@@ -301,7 +301,7 @@ public sealed class DynamicToolsDatabaseTests
     [Fact]
     public void DeleteDatabaseDeletesActiveDatabaseAndSwitchesToDefault()
     {
-        var originalPath = DynamicTools.SavePath;
+        var originalPath = ScriptTools.SavePath;
         var databaseName = UniqueName("active-delete-db");
         var databasePath = GetDefaultDatabasePath(databaseName);
         var defaultPath = GetDefaultDatabasePath(McpConstants.DefaultDatabaseFileName);
@@ -312,14 +312,14 @@ public sealed class DynamicToolsDatabaseTests
                 File.Delete(databasePath);
 
             Assert.Contains("Switched database from:", _tools.SetDatabase(databaseName, create: true), StringComparison.Ordinal);
-            Assert.Equal(databasePath, DynamicTools.SavePath);
+            Assert.Equal(databasePath, ScriptTools.SavePath);
 
             var result = _tools.DeleteDatabase(databaseName, confirm: true);
 
             Assert.Contains($"Deleted database: {databasePath}", result, StringComparison.Ordinal);
             Assert.Contains($"Active database: {defaultPath}", result, StringComparison.Ordinal);
             Assert.False(File.Exists(databasePath));
-            Assert.Equal(defaultPath, DynamicTools.SavePath);
+            Assert.Equal(defaultPath, ScriptTools.SavePath);
             Assert.True(File.Exists(defaultPath));
         }
         finally
@@ -332,18 +332,18 @@ public sealed class DynamicToolsDatabaseTests
     public void DeleteDatabaseRejectsDeletingDefaultDatabase()
     {
         var defaultPath = GetDefaultDatabasePath(McpConstants.DefaultDatabaseFileName);
-        var originalPath = DynamicTools.SavePath;
+        var originalPath = ScriptTools.SavePath;
 
         var result = _tools.DeleteDatabase(defaultPath);
 
         Assert.Equal("Error: the default database cannot be deleted.", result);
-        Assert.Equal(originalPath, DynamicTools.SavePath);
+        Assert.Equal(originalPath, ScriptTools.SavePath);
     }
 
     [Fact]
     public void DeleteDatabaseChecksExistenceBeforePromptingForConfirmation()
     {
-        var originalPath = DynamicTools.SavePath;
+        var originalPath = ScriptTools.SavePath;
         var databaseName = UniqueName("missing-delete-db");
         var databasePath = GetDefaultDatabasePath(databaseName);
 
@@ -356,7 +356,7 @@ public sealed class DynamicToolsDatabaseTests
 
             Assert.Equal($"Error: database not found: {databasePath}", result);
             Assert.DoesNotContain("Say yes or no.", result, StringComparison.Ordinal);
-            Assert.Equal(originalPath, DynamicTools.SavePath);
+            Assert.Equal(originalPath, ScriptTools.SavePath);
         }
         finally
         {
@@ -385,10 +385,10 @@ public sealed class DynamicToolsDatabaseTests
 
     private void RestoreAndDeleteDatabase(string originalPath, string databasePath)
     {
-        if (!string.Equals(DynamicTools.SavePath, originalPath, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(ScriptTools.SavePath, originalPath, StringComparison.OrdinalIgnoreCase))
             _tools.SetDatabase(originalPath);
 
-        DynamicTools.SavePath = originalPath;
+        ScriptTools.SavePath = originalPath;
 
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 

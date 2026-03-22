@@ -11,5 +11,5 @@
   "repository": "https://github.com/sithiro/ScriptMCP",
   "homepage": "https://github.com/sithiro/ScriptMCP",
   "license": "Apache-2.0",
-  "keywords": ["scripting", "automation", "jit", "mcp", "dynamic-functions", ".net", "csharp"]
+  "keywords": ["scripting", "automation", "jit", "mcp", "scripts", ".net", "csharp"]
 }

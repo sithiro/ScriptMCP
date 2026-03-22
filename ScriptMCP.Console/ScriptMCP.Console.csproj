@@ -17,4 +17,18 @@
     <ProjectReference Include="..\ScriptMCP.Library\ScriptMCP.Library.csproj" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <ExtensionServerDir>$(MSBuildProjectDirectory)\..\ScriptMCP.Extension\server</ExtensionServerDir>
+    <ExtensionPublishRid Condition="'$(ExtensionPublishRid)' == ''">win-x64</ExtensionPublishRid>
+  </PropertyGroup>
+
+  <Target Name="PublishExtensionServer" AfterTargets="Build" Condition="'$(ScriptMcpSkipExtensionPublish)' != 'true'">
+    <Message Importance="high" Text="Publishing self-contained ScriptMCP.Console to $(ExtensionServerDir)" />
+    <MakeDir Directories="$(ExtensionServerDir)" />
+    <RemoveDir Directories="$(ExtensionServerDir)" />
+    <MakeDir Directories="$(ExtensionServerDir)" />
+    <Exec
+      Command="dotnet publish &quot;$(MSBuildProjectFullPath)&quot; -c $(Configuration) -r $(ExtensionPublishRid) --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true /p:IncludeAllContentForSelfExtract=true /p:DebugSymbols=false /p:DebugType=None /p:ScriptMcpSkipExtensionPublish=true -o &quot;$(ExtensionServerDir)&quot;" />
+  </Target>
+
 </Project>

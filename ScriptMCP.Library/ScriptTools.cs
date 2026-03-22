@@ -23,7 +23,7 @@ public class DynParam
     [JsonPropertyName("Description")] public string Description { get; set; } = "";
 }
 
-public class DynamicFunction
+public class Script
 {
     [JsonPropertyName("Name")]                public string        Name                { get; set; } = "";
     [JsonPropertyName("Description")]         public string        Description         { get; set; } = "";
@@ -34,11 +34,11 @@ public class DynamicFunction
     [JsonPropertyName("Dependencies")]        public string?       Dependencies        { get; set; } = "";
 }
 
-// ── DynamicTools ──────────────────────────────────────────────────────────────
+// ── ScriptTools ──────────────────────────────────────────────────────────────
 
-public class DynamicTools
+public class ScriptTools
 {
-    private enum DynamicProcessOutputMode
+    private enum ScriptProcessOutputMode
     {
         Default,
         WriteNew,
@@ -77,7 +77,7 @@ public class DynamicTools
         return $" {McpConstants.DatabaseArgumentName} \"{SavePath.Replace("\"", "\\\"")}\"";
     }
 
-    public DynamicTools() => Initialize();
+    public ScriptTools() => Initialize();
 
     // ── Initialization ────────────────────────────────────────────────────────
 
@@ -133,13 +133,36 @@ public class DynamicTools
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
 
+        // Migrate: rename old 'functions' table to 'scripts' if needed
+        using var checkOld = conn.CreateCommand();
+        checkOld.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='functions'";
+        var hasOldTable = (long)checkOld.ExecuteScalar()! > 0;
+
+        using var checkNew = conn.CreateCommand();
+        checkNew.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='scripts'";
+        var hasNewTable = (long)checkNew.ExecuteScalar()! > 0;
+
+        if (hasOldTable && !hasNewTable)
+        {
+            using var rename = conn.CreateCommand();
+            rename.CommandText = "ALTER TABLE functions RENAME TO scripts";
+            rename.ExecuteNonQuery();
+
+            // Rename column function_type -> script_type
+            using var renameCol = conn.CreateCommand();
+            renameCol.CommandText = "ALTER TABLE scripts RENAME COLUMN function_type TO script_type";
+            renameCol.ExecuteNonQuery();
+
+            Console.Error.WriteLine("Migrated table 'functions' -> 'scripts' and column 'function_type' -> 'script_type'.");
+        }
+
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            CREATE TABLE IF NOT EXISTS functions (
+            CREATE TABLE IF NOT EXISTS scripts (
                 name                TEXT PRIMARY KEY COLLATE NOCASE,
                 description         TEXT NOT NULL,
                 parameters          TEXT NOT NULL,
-                function_type       TEXT NOT NULL DEFAULT 'code',
+                script_type         TEXT NOT NULL DEFAULT 'code',
                 body                TEXT NOT NULL,
                 compiled_assembly   BLOB,
                 output_instructions TEXT
@@ -148,7 +171,7 @@ public class DynamicTools
 
         // Migrate: add output_instructions column if missing (existing DBs)
         using var pragma = conn.CreateCommand();
-        pragma.CommandText = "PRAGMA table_info(functions)";
+        pragma.CommandText = "PRAGMA table_info(scripts)";
         bool hasOutputInstructions = false;
         using (var reader = pragma.ExecuteReader())
         {
@@ -161,14 +184,14 @@ public class DynamicTools
         if (!hasOutputInstructions)
         {
             using var alter = conn.CreateCommand();
-            alter.CommandText = "ALTER TABLE functions ADD COLUMN output_instructions TEXT";
+            alter.CommandText = "ALTER TABLE scripts ADD COLUMN output_instructions TEXT";
             alter.ExecuteNonQuery();
         }
 
         // Migrate: add dependencies column if missing (existing DBs)
         bool hasDependencies = false;
         using var pragma2 = conn.CreateCommand();
-        pragma2.CommandText = "PRAGMA table_info(functions)";
+        pragma2.CommandText = "PRAGMA table_info(scripts)";
         using (var reader2 = pragma2.ExecuteReader())
         {
             while (reader2.Read())
@@ -180,27 +203,27 @@ public class DynamicTools
         if (!hasDependencies)
         {
             using var alter2 = conn.CreateCommand();
-            alter2.CommandText = "ALTER TABLE functions ADD COLUMN dependencies TEXT";
+            alter2.CommandText = "ALTER TABLE scripts ADD COLUMN dependencies TEXT";
             alter2.ExecuteNonQuery();
         }
 
-        // Backfill: scan existing functions that have never been scanned (dependencies IS NULL)
+        // Backfill: scan existing scripts that have never been scanned (dependencies IS NULL)
         BackfillDependencies(conn);
     }
 
     private static void BackfillDependencies(SqliteConnection conn)
     {
-        var knownNames = GetFunctionNames(conn);
+        var knownNames = GetScriptNames(conn);
 
         using var scanCmd = conn.CreateCommand();
-        scanCmd.CommandText = "SELECT name, parameters, function_type, body FROM functions WHERE dependencies IS NULL";
+        scanCmd.CommandText = "SELECT name, parameters, script_type, body FROM scripts WHERE dependencies IS NULL";
 
         var toUpdate = new List<(string name, string deps)>();
         using (var scanReader = scanCmd.ExecuteReader())
         {
             while (scanReader.Read())
             {
-                var func = new DynamicFunction
+                var func = new Script
                 {
                     Name = scanReader.GetString(0),
                     Parameters = JsonSerializer.Deserialize<List<DynParam>>(scanReader.GetString(1), ReadOptions) ?? new List<DynParam>(),
@@ -215,14 +238,14 @@ public class DynamicTools
         foreach (var (name, deps) in toUpdate)
         {
             using var upd = conn.CreateCommand();
-            upd.CommandText = "UPDATE functions SET dependencies = @deps WHERE name = @name";
+            upd.CommandText = "UPDATE scripts SET dependencies = @deps WHERE name = @name";
             upd.Parameters.AddWithValue("@deps", deps);
             upd.Parameters.AddWithValue("@name", name);
             upd.ExecuteNonQuery();
         }
 
         if (toUpdate.Count > 0)
-            Console.Error.WriteLine($"Backfilled dependencies for {toUpdate.Count} function(s).");
+            Console.Error.WriteLine($"Backfilled dependencies for {toUpdate.Count} script(s).");
     }
 
     private void MigrateFromJson()
@@ -245,7 +268,7 @@ public class DynamicTools
 
         using (var countCmd = conn.CreateCommand())
         {
-            countCmd.CommandText = "SELECT COUNT(*) FROM functions";
+            countCmd.CommandText = "SELECT COUNT(*) FROM scripts";
             var count = (long)countCmd.ExecuteScalar()!;
             if (count > 0) return;
         }
@@ -253,7 +276,7 @@ public class DynamicTools
         try
         {
             var json = File.ReadAllText(jsonPath);
-            var funcs = JsonSerializer.Deserialize<List<DynamicFunction>>(json, ReadOptions);
+            var funcs = JsonSerializer.Deserialize<List<Script>>(json, ReadOptions);
             if (funcs == null || funcs.Count == 0) return;
 
             var migrationNames = funcs.Select(f => f.Name).ToList();
@@ -275,11 +298,11 @@ public class DynamicTools
 
                 var deps = ExtractDependencies(func, migrationNames);
                 func.Dependencies = DependenciesToCsv(deps);
-                InsertFunction(conn, func, assemblyBytes);
+                InsertScript(conn, func, assemblyBytes);
                 migrated++;
             }
 
-            Console.Error.WriteLine($"Migrated {migrated} function(s) from {jsonPath} to SQLite.");
+            Console.Error.WriteLine($"Migrated {migrated} script(s) from {jsonPath} to SQLite.");
 
             // Rename old JSON file
             var backupPath = jsonPath + ".migrated";
@@ -294,15 +317,15 @@ public class DynamicTools
 
     // ── Listing ───────────────────────────────────────────────────────────────
 
-    [McpServerTool(Name = "list_dynamic_functions")]
-    [Description("Lists all registered dynamic function names as a comma-delimited string")]
-    public string ListDynamicFunctions()
+    [McpServerTool(Name = "list_scripts")]
+    [Description("Lists all registered script names as a comma-delimited string")]
+    public string ListScripts()
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name FROM functions ORDER BY name";
+        cmd.CommandText = "SELECT name FROM scripts ORDER BY name";
 
         using var reader = cmd.ExecuteReader();
         var names = new List<string>();
@@ -317,11 +340,11 @@ public class DynamicTools
 
     // ── Deletion ──────────────────────────────────────────────────────────────
 
-    [McpServerTool(Name = "delete_dynamic_function")]
-    [Description("Deletes a registered dynamic function from the database by name")]
-    public string DeleteDynamicFunction(
-        [Description("The name of the dynamic function to delete")] string name,
-        [Description("Set to true to force deletion when other functions depend on this one")] bool forced = false)
+    [McpServerTool(Name = "delete_script")]
+    [Description("Deletes a registered script from the database by name")]
+    public string DeleteScript(
+        [Description("The name of the script to delete")] string name,
+        [Description("Set to true to force deletion when other scripts depend on this one")] bool forced = false)
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
@@ -330,42 +353,42 @@ public class DynamicTools
 
         if (dependents.Count > 0 && !forced)
         {
-            return $"Cannot delete '{name}' because these functions depend on it: {string.Join(", ", dependents)}.\n" +
+            return $"Cannot delete '{name}' because these scripts depend on it: {string.Join(", ", dependents)}.\n" +
                    "User confirmation is required before forced deletion.";
         }
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM functions WHERE name = @name";
+        cmd.CommandText = "DELETE FROM scripts WHERE name = @name";
         cmd.Parameters.AddWithValue("@name", name);
 
         var rows = cmd.ExecuteNonQuery();
         if (rows == 0)
-            return $"Function '{name}' not found.";
+            return $"Script '{name}' not found.";
 
-        var msg = $"Function '{name}' deleted successfully.";
+        var msg = $"Script '{name}' deleted successfully.";
         if (dependents.Count > 0)
-            msg += $" Note: the following function(s) depended on it and may break: {string.Join(", ", dependents)}.";
+            msg += $" Note: the following script(s) depended on it and may break: {string.Join(", ", dependents)}.";
         return msg;
     }
 
     // ── Inspection ─────────────────────────────────────────────────────────────
 
-    [McpServerTool(Name = "inspect_dynamic_function")]
-    [Description("Inspects a registered dynamic function and returns metadata and parameters. Set fullInspection=true to also include source code and compiled status.")]
-    public string InspectDynamicFunction(
-        [Description("The name of the dynamic function to inspect")] string name,
+    [McpServerTool(Name = "inspect_script")]
+    [Description("Inspects a registered script and returns metadata and parameters. Set fullInspection=true to also include source code and compiled status.")]
+    public string InspectScript(
+        [Description("The name of the script to inspect")] string name,
         [Description("When true, include source code and compiled status. When false or omitted, omit those details.")] bool fullInspection = false)
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name, description, parameters, function_type, body, compiled_assembly, output_instructions, dependencies FROM functions WHERE name = @name";
+        cmd.CommandText = "SELECT name, description, parameters, script_type, body, compiled_assembly, output_instructions, dependencies FROM scripts WHERE name = @name";
         cmd.Parameters.AddWithValue("@name", name);
 
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
-            return $"Function '{name}' not found. Use list_dynamic_functions to see available functions.";
+            return $"Script '{name}' not found. Use list_scripts to see available scripts.";
 
         var funcName            = reader.GetString(0);
         var description         = reader.GetString(1);
@@ -382,7 +405,7 @@ public class DynamicTools
         var isInstr = string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"Function: {funcName}");
+        sb.AppendLine($"Script: {funcName}");
         sb.AppendLine($"Type:        {functionType}");
         sb.AppendLine($"Description: {description}");
 
@@ -425,18 +448,18 @@ public class DynamicTools
 
     // ── Registration ──────────────────────────────────────────────────────────
 
-    [McpServerTool(Name = "register_dynamic_function")]
-    [Description("Registers a new dynamic function that can be called later. Use functionType 'instructions' " +
+    [McpServerTool(Name = "create_script")]
+    [Description("Creates a new script that can be called later. Use scriptType 'instructions' " +
                  "for plain English instructions (supports {paramName} substitution). " +
-                 "Use functionType 'code' for C# script bodies that are compiled and executed at runtime via Roslyn.")]
-    public string RegisterDynamicFunction(
-        [Description("Function name")] string name,
-        [Description("Description of what the function does")] string description,
+                 "Use scriptType 'code' for C# script bodies that are compiled and executed at runtime via Roslyn.")]
+    public string CreateScript(
+        [Description("Script name")] string name,
+        [Description("Description of what the script does")] string description,
         [Description("JSON array of parameters, e.g. [{\"name\":\"x\",\"type\":\"int\",\"description\":\"The number\"}]")]
             string parameters,
-        [Description("Plain English instructions (supports {paramName} substitution) or C# body depending on functionType")]
+        [Description("Plain English instructions (supports {paramName} substitution) or C# body depending on scriptType")]
             string body,
-        [Description("Function type: 'instructions' for plain English (recommended), or 'code' for C# (compiled at runtime)")]
+        [Description("Script type: 'instructions' for plain English (recommended), or 'code' for C# (compiled at runtime)")]
             string functionType = "instructions",
         [Description("Optional instructions for how to present/format the output after execution (e.g. 'present as a markdown table', 'summarize in bullet points')")]
             string outputInstructions = "")
@@ -446,7 +469,7 @@ public class DynamicTools
             var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parameters, ReadOptions)
                             ?? new List<DynParam>();
 
-            var func = new DynamicFunction
+            var func = new Script
             {
                 Name                = name,
                 Description         = description,
@@ -458,7 +481,7 @@ public class DynamicTools
                     : outputInstructions,
             };
 
-            ValidateFunctionName(func.Name);
+            ValidateScriptName(func.Name);
 
             byte[]? assemblyBytes = null;
 
@@ -473,34 +496,34 @@ public class DynamicTools
             using var conn = new SqliteConnection(ConnectionString);
             conn.Open();
 
-            var knownNames = GetFunctionNames(conn);
+            var knownNames = GetScriptNames(conn);
             var deps = ExtractDependencies(func, knownNames);
             var mutualDeps = FindDirectMutualDependencies(conn, func.Name, deps);
             if (mutualDeps.Count > 0)
             {
-                return $"Registration failed: direct circular dependency detected for '{func.Name}': " +
+                return $"Creation failed: direct circular dependency detected for '{func.Name}': " +
                        $"{string.Join(", ", mutualDeps.Select(d => $"{func.Name} <-> {d}"))}.";
             }
             func.Dependencies = DependenciesToCsv(deps);
 
-            InsertFunction(conn, func, assemblyBytes);
+            InsertScript(conn, func, assemblyBytes);
 
-            return $"{(IsInstructions(func) ? "Instructions" : "Code")} function '{func.Name}' registered successfully " +
+            return $"{(IsInstructions(func) ? "Instructions" : "Code")} script '{func.Name}' created successfully " +
                    $"with {func.Parameters.Count} parameter(s).";
         }
         catch (Exception ex)
         {
-            return $"Registration failed: {ex.Message}";
+            return $"Creation failed: {ex.Message}";
         }
     }
 
-    [McpServerTool(Name = "update_dynamic_function")]
-    [Description("Updates a single field on an existing dynamic function entry. " +
-                 "Supported fields: name, description, parameters, function_type, body, output_instructions, dependencies. " +
-                 "When the update affects execution, the function is recompiled automatically.")]
-    public string UpdateDynamicFunction(
-        [Description("The existing function name to update")] string name,
-        [Description("The field/column to update: name, description, parameters, function_type, body, output_instructions, or dependencies")] string field,
+    [McpServerTool(Name = "update_script")]
+    [Description("Updates a single field on an existing script entry. " +
+                 "Supported fields: name, description, parameters, script_type, body, output_instructions, dependencies. " +
+                 "When the update affects execution, the script is recompiled automatically.")]
+    public string UpdateScript(
+        [Description("The existing script name to update")] string name,
+        [Description("The field/column to update: name, description, parameters, script_type, body, output_instructions, or dependencies")] string field,
         [Description("The new value for that field")] string value)
     {
         using var conn = new SqliteConnection(ConnectionString);
@@ -508,16 +531,16 @@ public class DynamicTools
 
         using var readCmd = conn.CreateCommand();
         readCmd.CommandText = @"
-            SELECT name, description, parameters, function_type, body, output_instructions, dependencies
-            FROM functions
+            SELECT name, description, parameters, script_type, body, output_instructions, dependencies
+            FROM scripts
             WHERE name = @name";
         readCmd.Parameters.AddWithValue("@name", name);
 
         using var reader = readCmd.ExecuteReader();
         if (!reader.Read())
-            return $"Function '{name}' not found.";
+            return $"Script '{name}' not found.";
 
-        var func = new DynamicFunction
+        var func = new Script
         {
             Name = reader.GetString(0),
             Description = reader.GetString(1),
@@ -554,7 +577,7 @@ public class DynamicTools
         // Auto-compute dependencies unless the user is explicitly setting them
         if (!string.Equals(normalizedField, "dependencies", StringComparison.OrdinalIgnoreCase))
         {
-            var knownNames = GetFunctionNames(conn);
+            var knownNames = GetScriptNames(conn);
             var deps = ExtractDependencies(func, knownNames);
             if (string.Equals(normalizedField, "body", StringComparison.OrdinalIgnoreCase))
             {
@@ -572,11 +595,11 @@ public class DynamicTools
         using var updateCmd = conn.CreateCommand();
         updateCmd.Transaction = tx;
         updateCmd.CommandText = @"
-            UPDATE functions
+            UPDATE scripts
             SET name = @new_name,
                 description = @description,
                 parameters = @parameters,
-                function_type = @function_type,
+                script_type = @script_type,
                 body = @body,
                 compiled_assembly = @compiled_assembly,
                 output_instructions = @output_instructions,
@@ -585,7 +608,7 @@ public class DynamicTools
         updateCmd.Parameters.AddWithValue("@new_name", func.Name);
         updateCmd.Parameters.AddWithValue("@description", func.Description);
         updateCmd.Parameters.AddWithValue("@parameters", JsonSerializer.Serialize(func.Parameters));
-        updateCmd.Parameters.AddWithValue("@function_type", func.FunctionType ?? "code");
+        updateCmd.Parameters.AddWithValue("@script_type", func.FunctionType ?? "code");
         updateCmd.Parameters.AddWithValue("@body", func.Body);
         updateCmd.Parameters.AddWithValue("@compiled_assembly", (object?)assemblyBytes ?? DBNull.Value);
         updateCmd.Parameters.AddWithValue("@output_instructions", (object?)func.OutputInstructions ?? DBNull.Value);
@@ -598,7 +621,7 @@ public class DynamicTools
             if (rows == 0)
             {
                 tx.Rollback();
-                return $"Function '{name}' not found.";
+                return $"Script '{name}' not found.";
             }
 
             // On rename: auto-patch callers that reference the old name
@@ -616,14 +639,14 @@ public class DynamicTools
 
                     using var readDep = conn.CreateCommand();
                     readDep.Transaction = tx;
-                    readDep.CommandText = "SELECT name, description, parameters, function_type, body, output_instructions FROM functions WHERE name = @n";
+                    readDep.CommandText = "SELECT name, description, parameters, script_type, body, output_instructions FROM scripts WHERE name = @n";
                     readDep.Parameters.AddWithValue("@n", depName);
 
-                    DynamicFunction? depFunc = null;
+                    Script? depFunc = null;
                     using (var depReader = readDep.ExecuteReader())
                     {
                         if (!depReader.Read()) continue;
-                        depFunc = new DynamicFunction
+                        depFunc = new Script
                         {
                             Name = depReader.GetString(0),
                             Description = depReader.GetString(1),
@@ -657,14 +680,14 @@ public class DynamicTools
                         depAsm = bytes2;
                     }
 
-                    var depKnown = GetFunctionNames(conn);
+                    var depKnown = GetScriptNames(conn);
                     var depDeps = ExtractDependencies(depFunc, depKnown);
                     depFunc.Dependencies = DependenciesToCsv(depDeps);
 
                     using var patchCmd = conn.CreateCommand();
                     patchCmd.Transaction = tx;
                     patchCmd.CommandText = @"
-                        UPDATE functions
+                        UPDATE scripts
                         SET body = @body,
                             compiled_assembly = @asm,
                             dependencies = @deps
@@ -681,7 +704,7 @@ public class DynamicTools
 
             tx.Commit();
 
-            var msg = $"Function '{name}' updated successfully: {normalizedField}.";
+            var msg = $"Script '{name}' updated successfully: {normalizedField}.";
             if (patchedCallers.Count > 0)
                 msg += $" Auto-patched caller(s): {string.Join(", ", patchedCallers)}.";
             return msg;
@@ -689,28 +712,28 @@ public class DynamicTools
         catch (SqliteException) when (string.Equals(normalizedField, "name", StringComparison.OrdinalIgnoreCase))
         {
             tx.Rollback();
-            return $"Update failed: a function named '{func.Name}' already exists.";
+            return $"Update failed: a script named '{func.Name}' already exists.";
         }
     }
 
     // ── Compilation ──────────────────────────────────────────────────────────
 
-    [McpServerTool(Name = "compile_dynamic_function")]
-    [Description("Compiles a registered code function from its stored source. " +
-                 "Use this after a ScriptMCP update to rebuild functions against the latest runtime.")]
-    public string CompileDynamicFunction(
-        [Description("The name of the dynamic function to recompile")] string name)
+    [McpServerTool(Name = "compile_script")]
+    [Description("Compiles a registered code script from its stored source. " +
+                 "Use this after a ScriptMCP update to rebuild scripts against the latest runtime.")]
+    public string CompileScript(
+        [Description("The name of the script to recompile")] string name)
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
 
         using var readCmd = conn.CreateCommand();
-        readCmd.CommandText = "SELECT parameters, function_type, body FROM functions WHERE name = @name";
+        readCmd.CommandText = "SELECT parameters, script_type, body FROM scripts WHERE name = @name";
         readCmd.Parameters.AddWithValue("@name", name);
 
         using var reader = readCmd.ExecuteReader();
         if (!reader.Read())
-            return $"Function '{name}' not found.";
+            return $"Script '{name}' not found.";
 
         var parametersJson = reader.GetString(0);
         var functionType   = reader.GetString(1);
@@ -718,12 +741,12 @@ public class DynamicTools
         reader.Close();
 
         if (string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase))
-            return $"Function '{name}' is an instructions function — nothing to compile.";
+            return $"Script '{name}' is an instructions script — nothing to compile.";
 
         var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parametersJson, ReadOptions)
                         ?? new List<DynParam>();
 
-        var func = new DynamicFunction
+        var func = new Script
         {
             Name         = name,
             FunctionType = functionType,
@@ -736,33 +759,33 @@ public class DynamicTools
             return $"Recompilation failed:\n{errors}";
 
         using var updateCmd = conn.CreateCommand();
-        updateCmd.CommandText = "UPDATE functions SET compiled_assembly = @asm WHERE name = @name";
+        updateCmd.CommandText = "UPDATE scripts SET compiled_assembly = @asm WHERE name = @name";
         updateCmd.Parameters.AddWithValue("@name", name);
         updateCmd.Parameters.AddWithValue("@asm", bytes);
         updateCmd.ExecuteNonQuery();
 
-        return $"Function '{name}' recompiled successfully.";
+        return $"Script '{name}' recompiled successfully.";
     }
 
     // ── Invocation ────────────────────────────────────────────────────────────
 
-    [McpServerTool(Name = "call_dynamic_function")]
-    [Description("Calls a previously registered dynamic function with the given arguments")]
-    public string CallDynamicFunction(
-        [Description("The name of the dynamic function to call")] string name,
+    [McpServerTool(Name = "call_script")]
+    [Description("Calls a previously registered script with the given arguments")]
+    public string CallScript(
+        [Description("The name of the script to call")] string name,
         [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}")
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name, description, parameters, function_type, body, compiled_assembly, output_instructions FROM functions WHERE name = @name";
+        cmd.CommandText = "SELECT name, description, parameters, script_type, body, compiled_assembly, output_instructions FROM scripts WHERE name = @name";
         cmd.Parameters.AddWithValue("@name", name);
 
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
-            return $"Dynamic function '{name}' not found. " +
-                   "Use list_dynamic_functions to see available functions.";
+            return $"Script '{name}' not found. " +
+                   "Use list_scripts to see available scripts.";
 
         var functionType = reader.GetString(3);
         var body = reader.GetString(4);
@@ -781,7 +804,7 @@ public class DynamicTools
         {
             // Code function — load compiled assembly
             if (reader.IsDBNull(5))
-                return $"Function '{name}' has no compiled assembly. Re-register it to compile.";
+                return $"Script '{name}' has no compiled assembly. Re-register it to compile.";
 
             var assemblyBytes = (byte[])reader[5];
             result = ExecuteCompiledCode(name, assemblyBytes, dynParams, arguments);
@@ -795,11 +818,11 @@ public class DynamicTools
 
     // ── Out-of-process invocation ──────────────────────────────────────────────
 
-    [McpServerTool(Name = "call_dynamic_process")]
-    [Description("Calls a dynamic function in a separate process (out-of-process execution). " +
+    [McpServerTool(Name = "call_process")]
+    [Description("Calls a script in a separate process (out-of-process execution). " +
                  "Useful for parallel execution or isolating side effects.")]
-    public string CallDynamicProcess(
-        [Description("The name of the dynamic function to call")] string name,
+    public string CallProcess(
+        [Description("The name of the script to call")] string name,
         [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}",
         [Description("Output mode: Default (uses --exec, no persisted output file), WriteNew (uses --exec-out, writes a new file per execution), WriteAppend (uses --exec-out-append, appends to one stable file)")] string output_mode = "Default")
     {
@@ -807,13 +830,13 @@ public class DynamicTools
         if (string.IsNullOrEmpty(exePath))
             return "Error: unable to resolve the current executable path.";
 
-        if (!Enum.TryParse<DynamicProcessOutputMode>(output_mode, ignoreCase: true, out var outputMode))
+        if (!Enum.TryParse<ScriptProcessOutputMode>(output_mode, ignoreCase: true, out var outputMode))
             return "Error: invalid output_mode. Supported values: Default, WriteNew, WriteAppend.";
 
         var execFlag = outputMode switch
         {
-            DynamicProcessOutputMode.WriteNew => "--exec-out",
-            DynamicProcessOutputMode.WriteAppend => "--exec-out-append",
+            ScriptProcessOutputMode.WriteNew => "--exec-out",
+            ScriptProcessOutputMode.WriteAppend => "--exec-out-append",
             _ => "--exec"
         };
 
@@ -863,9 +886,9 @@ public class DynamicTools
     // ── Scheduled Task Output ────────────────────────────────────────────────
 
     [McpServerTool(Name = "read_scheduled_task")]
-    [Description("Reads the most recent scheduled-task output file for the specified dynamic function.")]
+    [Description("Reads the most recent scheduled-task output file for the specified script.")]
     public string ReadScheduledTask(
-        [Description("Dynamic function name whose latest scheduled-task output should be returned")] string function_name)
+        [Description("Script name whose latest scheduled-task output should be returned")] string function_name)
     {
         var outputDirs = new[]
         {
@@ -952,12 +975,12 @@ public class DynamicTools
     // ── Scheduled Tasks ────────────────────────────────────────────────────────
 
     [McpServerTool(Name = "create_scheduled_task")]
-    [Description("Creates a scheduled task (Windows Task Scheduler or cron on Linux/macOS) that runs a ScriptMCP dynamic function at a given interval in minutes")]
+    [Description("Creates a scheduled task (Windows Task Scheduler or cron on Linux/macOS) that runs a ScriptMCP script at a given interval in minutes")]
     public string CreateScheduledTask(
-        [Description("Name of the ScriptMCP dynamic function to run")] string function_name,
-        [Description("JSON arguments for the function (default: {})")] string function_args = "{}",
+        [Description("Name of the ScriptMCP script to run")] string function_name,
+        [Description("JSON arguments for the script (default: {})")] string function_args = "{}",
         [Description("How often to run the task, in minutes")] int interval_minutes = 1,
-        [Description("When true, append each result to a stable <function>.txt file instead of creating a new timestamped file")] bool append = false)
+        [Description("When true, append each result to a stable <script>.txt file instead of creating a new timestamped file")] bool append = false)
     {
         string exePath = Environment.ProcessPath ?? "";
         if (string.IsNullOrEmpty(exePath))
@@ -970,9 +993,9 @@ public class DynamicTools
     }
 
     [McpServerTool(Name = "delete_scheduled_task")]
-    [Description("Deletes a scheduled task (Windows Task Scheduler or cron on Linux/macOS) for a ScriptMCP dynamic function.")]
+    [Description("Deletes a scheduled task (Windows Task Scheduler or cron on Linux/macOS) for a ScriptMCP script.")]
     public string DeleteScheduledTask(
-        [Description("Name of the ScriptMCP dynamic function whose scheduled task should be deleted")] string function_name,
+        [Description("Name of the ScriptMCP script whose scheduled task should be deleted")] string function_name,
         [Description("Interval in minutes used when the task was created")] int interval_minutes = 1)
     {
         if (OperatingSystem.IsWindows())
@@ -992,9 +1015,9 @@ public class DynamicTools
     }
 
     [McpServerTool(Name = "start_scheduled_task")]
-    [Description("Starts or enables a scheduled task for a ScriptMCP dynamic function.")]
+    [Description("Starts or enables a scheduled task for a ScriptMCP script.")]
     public string StartScheduledTask(
-        [Description("Name of the ScriptMCP dynamic function whose scheduled task should be started")] string function_name,
+        [Description("Name of the ScriptMCP script whose scheduled task should be started")] string function_name,
         [Description("Interval in minutes used when the task was created")] int interval_minutes = 1)
     {
         if (OperatingSystem.IsWindows())
@@ -1004,9 +1027,9 @@ public class DynamicTools
     }
 
     [McpServerTool(Name = "stop_scheduled_task")]
-    [Description("Stops or disables a scheduled task for a ScriptMCP dynamic function.")]
+    [Description("Stops or disables a scheduled task for a ScriptMCP script.")]
     public string StopScheduledTask(
-        [Description("Name of the ScriptMCP dynamic function whose scheduled task should be stopped")] string function_name,
+        [Description("Name of the ScriptMCP script whose scheduled task should be stopped")] string function_name,
         [Description("Interval in minutes used when the task was created")] int interval_minutes = 1)
     {
         if (OperatingSystem.IsWindows())
@@ -1192,10 +1215,10 @@ public class DynamicTools
         var sb = new StringBuilder();
         sb.AppendLine($"Scheduled task created and started.");
         sb.AppendLine($"  Name:     {tn}");
-        sb.AppendLine($"  Function: {function_name}({function_args})");
+        sb.AppendLine($"  Script:   {function_name}({function_args})");
         sb.AppendLine($"  Exe:      {exePath}");
         sb.AppendLine($"  Interval: Every {interval_minutes} minute(s)");
-        sb.AppendLine($"  Output:   {(append ? "Append to <function>.txt" : "New timestamped file per run")}");
+        sb.AppendLine($"  Output:   {(append ? "Append to <script>.txt" : "New timestamped file per run")}");
         sb.AppendLine();
         sb.AppendLine("Manage with:");
         sb.AppendLine($"  Run now:  schtasks /Run /TN \"{tn}\"");
@@ -1240,7 +1263,7 @@ public class DynamicTools
         var sb = new StringBuilder();
         sb.AppendLine("Scheduled task deleted.");
         sb.AppendLine($"  Name:     {tn}");
-        sb.AppendLine($"  Function: {function_name}");
+        sb.AppendLine($"  Script:   {function_name}");
         sb.AppendLine($"  Interval: Every {interval_minutes} minute(s)");
         return sb.ToString().Trim();
     }
@@ -1296,7 +1319,7 @@ public class DynamicTools
         var sb = new StringBuilder();
         sb.AppendLine("Scheduled task enabled and started.");
         sb.AppendLine($"  Name:     {tn}");
-        sb.AppendLine($"  Function: {function_name}");
+        sb.AppendLine($"  Script:   {function_name}");
         sb.AppendLine($"  Interval: Every {interval_minutes} minute(s)");
         return sb.ToString().Trim();
     }
@@ -1335,7 +1358,7 @@ public class DynamicTools
         var sb = new StringBuilder();
         sb.AppendLine("Scheduled task disabled.");
         sb.AppendLine($"  Name:     {tn}");
-        sb.AppendLine($"  Function: {function_name}");
+        sb.AppendLine($"  Script:   {function_name}");
         sb.AppendLine($"  Interval: Every {interval_minutes} minute(s)");
         return sb.ToString().Trim();
     }
@@ -1436,11 +1459,11 @@ public class DynamicTools
 
         var sb = new StringBuilder();
         sb.AppendLine($"Cron job created and run once.");
-        sb.AppendLine($"  Function: {function_name}({function_args})");
+        sb.AppendLine($"  Script:   {function_name}({function_args})");
         sb.AppendLine($"  Exe:      {exePath}");
         sb.AppendLine($"  Schedule: {schedule}");
         sb.AppendLine($"  Tag:      {tag}");
-        sb.AppendLine($"  Output:   {(append ? "Append to <function>.txt" : "New timestamped file per run")}");
+        sb.AppendLine($"  Output:   {(append ? "Append to <script>.txt" : "New timestamped file per run")}");
         sb.AppendLine();
         sb.AppendLine("Manage with:");
         sb.AppendLine($"  List:     crontab -l");
@@ -1510,7 +1533,7 @@ public class DynamicTools
 
         var sb = new StringBuilder();
         sb.AppendLine("Cron job deleted.");
-        sb.AppendLine($"  Function: {function_name}");
+        sb.AppendLine($"  Script:   {function_name}");
         sb.AppendLine($"  Tag:      {tag}");
         sb.AppendLine();
         sb.AppendLine("Manage with:");
@@ -1532,7 +1555,7 @@ public class DynamicTools
 
     // ── Compilation ───────────────────────────────────────────────────────────
 
-    private static (byte[]? bytes, string? errors) CompileFunction(DynamicFunction func)
+    private static (byte[]? bytes, string? errors) CompileFunction(Script func)
     {
         var preamble = new StringBuilder();
         foreach (var param in func.Parameters)
@@ -1598,7 +1621,7 @@ public class DynamicTools
         references.Add(_helperAssembly.Value.reference);
 
         var compilation = CSharpCompilation.Create(
-            assemblyName: $"DynFunc_{func.Name}_{Guid.NewGuid():N}",
+            assemblyName: $"Script_{func.Name}_{Guid.NewGuid():N}",
             syntaxTrees: new[] { syntaxTree },
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
@@ -1873,10 +1896,10 @@ public class DynamicTools
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private static bool IsInstructions(DynamicFunction f) =>
+    private static bool IsInstructions(Script f) =>
         string.Equals(f.FunctionType, "instructions", StringComparison.OrdinalIgnoreCase);
 
-    private static void ValidateFunctionName(string name)
+    private static void ValidateScriptName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("name cannot be empty.");
@@ -1896,23 +1919,25 @@ public class DynamicTools
             "name" => "name",
             "description" => "description",
             "parameters" => "parameters",
-            "function_type" => "function_type",
-            "functiontype" => "function_type",
+            "script_type" => "script_type",
+            "scripttype" => "script_type",
+            "function_type" => "script_type",   // backward compat
+            "functiontype" => "script_type",    // backward compat
             "body" => "body",
             "output_instructions" => "output_instructions",
             "outputinstructions" => "output_instructions",
             "dependencies" => "dependencies",
             _ => throw new ArgumentException(
-                "field must be one of: name, description, parameters, function_type, body, output_instructions, dependencies."),
+                "field must be one of: name, description, parameters, script_type, body, output_instructions, dependencies."),
         };
     }
 
-    private static void ApplyFieldUpdate(DynamicFunction func, string field, string value)
+    private static void ApplyFieldUpdate(Script func, string field, string value)
     {
         switch (field)
         {
             case "name":
-                ValidateFunctionName(value);
+                ValidateScriptName(value);
                 func.Name = value.Trim();
                 break;
 
@@ -1925,14 +1950,14 @@ public class DynamicTools
                     ?? new List<DynParam>();
                 break;
 
-            case "function_type":
-                var functionType = string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
-                if (!string.Equals(functionType, "code", StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase))
+            case "script_type":
+                var scriptType = string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+                if (!string.Equals(scriptType, "code", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(scriptType, "instructions", StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new ArgumentException("function_type must be 'code' or 'instructions'.");
+                    throw new ArgumentException("script_type must be 'code' or 'instructions'.");
                 }
-                func.FunctionType = functionType;
+                func.FunctionType = scriptType;
                 break;
 
             case "body":
@@ -1949,7 +1974,7 @@ public class DynamicTools
 
             default:
                 throw new ArgumentException(
-                    "field must be one of: name, description, parameters, function_type, body, output_instructions, dependencies.");
+                    "field must be one of: name, description, parameters, script_type, body, output_instructions, dependencies.");
         }
     }
 
@@ -1969,10 +1994,10 @@ public class DynamicTools
 
     // ── Dependency tracking ────────────────────────────────────────────────────
 
-    private static List<string> GetFunctionNames(SqliteConnection conn)
+    private static List<string> GetScriptNames(SqliteConnection conn)
     {
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name FROM functions ORDER BY LENGTH(name) DESC";
+        cmd.CommandText = "SELECT name FROM scripts ORDER BY LENGTH(name) DESC";
         var names = new List<string>();
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
@@ -1980,7 +2005,7 @@ public class DynamicTools
         return names;
     }
 
-    private static List<string> ExtractDependencies(DynamicFunction func, IReadOnlyList<string>? knownFunctions = null)
+    private static List<string> ExtractDependencies(Script func, IReadOnlyList<string>? knownFunctions = null)
     {
         if (string.IsNullOrWhiteSpace(func.Body))
             return new List<string>();
@@ -2032,7 +2057,7 @@ public class DynamicTools
     private static bool FunctionBodyReferencesName(SqliteConnection conn, string sourceFunctionName, string referencedFunctionName)
     {
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT body FROM functions WHERE name = @name";
+        cmd.CommandText = "SELECT body FROM scripts WHERE name = @name";
         cmd.Parameters.AddWithValue("@name", sourceFunctionName);
 
         var body = cmd.ExecuteScalar() as string;
@@ -2052,7 +2077,7 @@ public class DynamicTools
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            SELECT name FROM functions
+            SELECT name FROM scripts
             WHERE dependencies = @exact
                OR dependencies LIKE @start
                OR dependencies LIKE @mid
@@ -2069,16 +2094,16 @@ public class DynamicTools
         return dependents;
     }
 
-    private static void InsertFunction(SqliteConnection conn, DynamicFunction func, byte[]? assemblyBytes)
+    private static void InsertScript(SqliteConnection conn, Script func, byte[]? assemblyBytes)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            INSERT OR REPLACE INTO functions (name, description, parameters, function_type, body, compiled_assembly, output_instructions, dependencies)
-            VALUES (@name, @description, @parameters, @function_type, @body, @compiled_assembly, @output_instructions, @dependencies)";
+            INSERT OR REPLACE INTO scripts (name, description, parameters, script_type, body, compiled_assembly, output_instructions, dependencies)
+            VALUES (@name, @description, @parameters, @script_type, @body, @compiled_assembly, @output_instructions, @dependencies)";
         cmd.Parameters.AddWithValue("@name", func.Name);
         cmd.Parameters.AddWithValue("@description", func.Description);
         cmd.Parameters.AddWithValue("@parameters", JsonSerializer.Serialize(func.Parameters));
-        cmd.Parameters.AddWithValue("@function_type", func.FunctionType ?? "code");
+        cmd.Parameters.AddWithValue("@script_type", func.FunctionType ?? "code");
         cmd.Parameters.AddWithValue("@body", func.Body);
         cmd.Parameters.AddWithValue("@compiled_assembly", (object?)assemblyBytes ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@output_instructions", (object?)func.OutputInstructions ?? DBNull.Value);

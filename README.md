@@ -1,6 +1,6 @@
 # ScriptMCP
 
-A dynamic function runtime for AI agents via the Model Context Protocol (MCP). ScriptMCP lets your AI agent create, compile, and execute C# functions on the fly — no restart required. Functions persist in a local SQLite database and can be invoked in-process or out-of-process for parallel execution.
+A script runtime for AI agents via the Model Context Protocol (MCP). ScriptMCP lets your AI agent create, compile, and execute C# scripts on the fly — no restart required. Scripts persist in a local SQLite database and can be invoked in-process or out-of-process for parallel execution.
 
 ![ScriptMCP in Claude Code](snapshot2.png)
 
@@ -10,55 +10,55 @@ ScriptMCP exposes 17 MCP tools that together form a self-extending toolbox:
 
 | Tool                        | Description                                                     |
 | --------------------------- | --------------------------------------------------------------- |
-| `register_dynamic_function` | Register a new function (C# code or plain English instructions) |
-| `update_dynamic_function`   | Update one field on an existing function entry                  |
-| `call_dynamic_function`     | Execute a function in-process                                   |
-| `call_dynamic_process`      | Execute a function out-of-process (subprocess)                  |
-| `list_dynamic_functions`    | List registered function names as a comma-delimited string      |
-| `inspect_dynamic_function`  | View function metadata, with optional full source inspection    |
-| `compile_dynamic_function`  | Compile a code function from its stored source                  |
-| `delete_dynamic_function`   | Remove a function                                               |
+| `create_script`             | Create a new script (C# code or plain English instructions)     |
+| `update_script`             | Update one field on an existing script entry                    |
+| `call_script`               | Execute a script in-process                                     |
+| `call_process`       | Execute a script out-of-process (subprocess)                    |
+| `list_scripts`              | List registered script names as a comma-delimited string        |
+| `inspect_script`            | View script metadata, with optional full source inspection      |
+| `compile_script`            | Compile a code script from its stored source                    |
+| `delete_script`             | Remove a script                                                 |
 | `get_database`             | Show the currently active ScriptMCP database path               |
 | `set_database`             | Switch to a different ScriptMCP database at runtime             |
 | `delete_database`          | Delete a non-default ScriptMCP database                         |
-| `create_scheduled_task`     | Schedule a function to run at a recurring interval              |
-| `read_scheduled_task`       | Read the latest scheduled-task output for a function            |
-| `delete_scheduled_task`     | Delete a scheduled task for a function                          |
+| `create_scheduled_task`     | Schedule a script to run at a recurring interval                |
+| `read_scheduled_task`       | Read the latest scheduled-task output for a script              |
+| `delete_scheduled_task`     | Delete a scheduled task for a script                            |
 | `list_scheduled_tasks`      | List ScriptMCP scheduled tasks                                  |
 | `start_scheduled_task`      | Enable and start a scheduled task                               |
 | `stop_scheduled_task`       | Disable a scheduled task                                        |
 
 ### How It Works
 
-1. **Discover** — the AI agent discovers available functions via `list_dynamic_functions` at the start of each conversation
-2. **Register** — the AI agent writes and registers C# functions or plain English instructions on your behalf (or you provide explicit code)
-3. **Persist** — functions are **compiled via Roslyn** on registration and **stored in SQLite** — they survive server restarts
-4. **Execute** — functions are invoked automatically by the AI via `call_dynamic_function` (in-process) or `call_dynamic_process` (out-of-process)
+1. **Discover** — the AI agent discovers available scripts via `list_scripts` at the start of each conversation
+2. **Create** — the AI agent writes and creates C# scripts or plain English instructions on your behalf (or you provide explicit code)
+3. **Persist** — scripts are **compiled via Roslyn** on creation and **stored in SQLite** — they survive server restarts
+4. **Execute** — scripts are invoked automatically by the AI via `call_script` (in-process) or `call_process` (out-of-process)
 5. **Switch Databases** — the active SQLite database can be inspected or changed at runtime via `get_database` and `set_database`
-6. **Schedule** — functions can be scheduled to run at recurring intervals via `create_scheduled_task`
-7. **Update** — existing functions can be revised in place with `update_dynamic_function` when only one stored field needs to change
-8. **Delete** — functions or non-default databases can be removed when no longer needed
+6. **Schedule** — scripts can be scheduled to run at recurring intervals via `create_scheduled_task`
+7. **Update** — existing scripts can be revised in place with `update_script` when only one stored field needs to change
+8. **Delete** — scripts or non-default databases can be removed when no longer needed
 
-### Function Types
+### Script Types
 
 - **`code`** — C# method bodies compiled at runtime. Has access to .NET 9 APIs including HTTP, JSON, regex, diagnostics, and more.
 - **`instructions`** — Plain English instructions the AI reads and follows (e.g. multi-step workflows combining multiple tools and web search).
 
 ### In-Process Execution
 
-`call_dynamic_function` runs a function directly inside the MCP server process. This is the default and fastest way to execute a function.
+`call_script` runs a script directly inside the MCP server process. This is the default and fastest way to execute a script.
 
 ### Out-of-Process Execution
 
-`call_dynamic_process` spawns `scriptmcp.exe --exec <functionName> [argsJson]` as a subprocess. This enables parallelization.
+`call_process` spawns `scriptmcp.exe --exec <scriptName> [argsJson]` as a subprocess. This enables parallelization.
 
 ### Scheduled Tasks
 
-`create_scheduled_task` sets up a recurring job that runs a dynamic function at a fixed interval. On Windows it uses Task Scheduler; on Linux/macOS it uses cron.
+`create_scheduled_task` sets up a recurring job that runs a script at a fixed interval. On Windows it uses Task Scheduler; on Linux/macOS it uses cron.
 
 ### Database Selection
 
-ScriptMCP stores functions in a SQLite database and can switch databases during a live session:
+ScriptMCP stores scripts in a SQLite database and can switch databases during a live session:
 
 - `get_database` returns the currently active database path
 - `set_database` switches to another database path or database name
@@ -68,17 +68,17 @@ If `set_database` receives only a file name such as `work.db`, it resolves that 
 
 ### Output Instructions
 
-Functions can include optional **output instructions** that tell the AI how to format results. The AI reads the instructions and formats the output accordingly — e.g. render as a markdown table, display in an ASCII box, summarize in bullet points.
+Scripts can include optional **output instructions** that tell the AI how to format results. The AI reads the instructions and formats the output accordingly — e.g. render as a markdown table, display in an ASCII box, summarize in bullet points.
 
 ## Examples
 
-### Let the AI create a function for you
+### Let the AI create a script for you
 
-Just describe what you need in natural language — the AI writes the C# code, registers it, and calls it:
+Just describe what you need in natural language — the AI writes the C# code, creates the script, and calls it:
 
 ```
-You:    create a function that returns the current time, nothing else
-Agent:  [registers get_time → return DateTime.Now.ToString("hh:mm:ss tt");]
+You:    create a script that returns the current time, nothing else
+Agent:  [creates get_time → return DateTime.Now.ToString("hh:mm:ss tt");]
 
 You:    what time is it?
 Agent:  10:07:39 pm
@@ -87,19 +87,19 @@ Agent:  10:07:39 pm
 ### HTTP JSON fetch
 
 ```
-You:    create a function that fetches a JSON endpoint and returns the top-level keys
-Agent:  [registers json_keys → fetches via HttpClient, parses with System.Text.Json]
+You:    create a script that fetches a JSON endpoint and returns the top-level keys
+Agent:  [creates json_keys → fetches via HttpClient, parses with System.Text.Json]
 
 You:    run json_keys on https://api.example.com/status
 Agent:  status, version, uptime
 ```
 
-### Instructions-type functions
+### Instructions-type scripts
 
-Not everything needs code. You can register a function with plain English step-by-step instructions that become part of the function. When the function is called, the AI reads and follows those instructions:
+Not everything needs code. You can create a script with plain English step-by-step instructions that become part of the script. When the script is called, the AI reads and follows those instructions:
 
 ```
-You:    create a function called find_stock_symbol with these instructions:
+You:    create a script called find_stock_symbol with these instructions:
         1) Take the user's description and search Yahoo Finance for a matching ticker
         2) Return the ticker symbol, company name, and exchange
 
@@ -108,23 +108,26 @@ Agent:  [calls find_stock_symbol → reads stored instructions → searches Yaho
         TSLA — Tesla, Inc. (NASDAQ)
 ```
 
-### Function chaining
+### Script chaining
 
-Code functions can call other functions and hand off to the AI via `[Output Instructions]`:
+Code scripts can call other scripts and hand off to the AI via `[Output Instructions]`:
 
 ```
-You:    create foo — calls get_time, then tells the AI to format it
-Agent:  [registers foo as a code function]:
+You:    create get_btc_price_eur — gets BTC price then tells the AI to convert it
+Agent:  [creates get_btc_price_eur as a code script]:
 
-        var timeOutput = ScriptMCP.Call("get_time", "{}").Trim();
-        return timeOutput + "\n[Output Instructions]: Extract the time "
-             + "and return it as hours, mins, secs.";
+        var price = ScriptMCP.Call("get_btc_price", "{}").Trim();
+        return price + "\n[Output Instructions]: This is the current BTC price in USD. "
+             + "Now call the usd_to_eur script with this amount to convert it, "
+             + "then return the EUR result to the user.";
 
-You:    run foo
-Agent:  11 hours, 12 mins, 23 secs
+You:    what's bitcoin worth in euros?
+Agent:  [calls get_btc_price_eur → gets $68,721.00]
+        [follows output instructions → calls usd_to_eur with $68,721.00]
+        €59,473.22
 ```
 
-The code function handles what code does best (calling APIs, fetching data), then the AI handles what it does best (interpreting instructions and chaining tool calls).
+The code script handles what code does best (calling APIs, fetching data), then the output instructions hand off to the AI for the next step — including calling another script. This creates a tail-call chain where each script can delegate onward to the AI or to other scripts.
 
 ### Scheduled tasks
 
@@ -171,7 +174,7 @@ Agent:  [calls set_database → path="sandbox.db", create=true]
 | Folder | Purpose |
 | ------ | ------- |
 | `ScriptMCP.Console` | The MCP server entry point — hosts the stdio transport and wires up all tools |
-| `ScriptMCP.Library` | Core library containing dynamic function management, compilation, and tool definitions |
+| `ScriptMCP.Library` | Core library containing script management, compilation, and tool definitions |
 | `ScriptMCP.Extension` | Packaging for Claude Desktop — contains `manifest.json` and a `server/` folder for the binary |
 | `ScriptMCP.Plugin` | Claude Code plugin — slash commands, hooks, skills, and MCP server configuration |
 | `ScriptMCP.Tests` | Unit and integration tests |
@@ -256,9 +259,9 @@ codex mcp remove scriptmcp
 `scriptmcp` supports these runtime arguments:
 
 - `--db [FILEPATH|FILENAME]`: use a specific SQLite database path instead of the default ScriptMCP data directory
-- `--exec <functionName> [argsJson]`: execute one dynamic function and write the result to stdout
-- `--exec-out <functionName> [argsJson]`: execute one dynamic function, write the result to stdout, and persist the cleaned output to a new timestamped file
-- `--exec-out-append <functionName> [argsJson]`: execute one dynamic function, write the result to stdout, and append the cleaned output to a stable `<function>.txt` file
+- `--exec <scriptName> [argsJson]`: execute one script and write the result to stdout
+- `--exec-out <scriptName> [argsJson]`: execute one script, write the result to stdout, and persist the cleaned output to a new timestamped file
+- `--exec-out-append <scriptName> [argsJson]`: execute one script, write the result to stdout, and append the cleaned output to a stable `<script>.txt` file
 
 Examples:
 
@@ -285,7 +288,7 @@ At runtime, agents can inspect or change the active database without restarting 
 
 ### Data Directory
 
-Functions are persisted in a SQLite database created on first run. Execution output from `--exec-out` is stored in the `output/` folder alongside it:
+Scripts are persisted in a SQLite database created on first run. Execution output from `--exec-out` is stored in the `output/` folder alongside it:
 
 - Windows: `%LOCALAPPDATA%\ScriptMCP\`
 - macOS: `~/Library/Application Support/ScriptMCP/`
@@ -293,8 +296,8 @@ Functions are persisted in a SQLite database created on first run. Execution out
 
 | File           | Purpose                                                                                               |
 | -------------- | ----------------------------------------------------------------------------------------------------- |
-| `scriptmcp.db` | SQLite database of registered functions                                                               |
-| `output/`      | Timestamped files or append-mode `<function>.txt` files written by `--exec-out` / `--exec-out-append` |
+| `scriptmcp.db` | SQLite database of registered scripts                                                               |
+| `output/`      | Timestamped files or append-mode `<script>.txt` files written by `--exec-out` / `--exec-out-append` |
 
 ## Agent Instructions (CLAUDE.md / AGENTS.md)
 

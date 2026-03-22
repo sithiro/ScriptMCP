@@ -60,32 +60,32 @@ void WriteScheduledTaskOutput(string functionName, string result, bool append)
 {
     if (append)
     {
-        var appendPath = DynamicTools.GetScheduledTaskAppendOutputPath(functionName);
+        var appendPath = ScriptTools.GetScheduledTaskAppendOutputPath(functionName);
         var text = result + Environment.NewLine;
         File.AppendAllText(appendPath, text, fileEncoding);
         return;
     }
 
-    var timestampedPath = DynamicTools.GetScheduledTaskOutputPath(functionName);
+    var timestampedPath = ScriptTools.GetScheduledTaskOutputPath(functionName);
     File.WriteAllText(timestampedPath, result, fileEncoding);
 }
 
 // ── CLI mode: --exec <functionName> [argsJson] ──────────────────────────────
-// Executes a single dynamic function and exits without starting the MCP server.
+// Executes a single script and exits without starting the MCP server.
 var execIndex = Array.IndexOf(args, "--exec");
 var execOutIndex = Array.IndexOf(args, "--exec-out");
 var execOutAppendIndex = Array.IndexOf(args, "--exec-out-append");
 
 if (execOutAppendIndex >= 0 && execOutAppendIndex + 1 < args.Length)
 {
-    // --exec-out-append: execute function, write to stdout and append output to <function>.txt
+    // --exec-out-append: execute script, write to stdout and append output to <script>.txt
     var functionName = args[execOutAppendIndex + 1];
     var argsJson = (execOutAppendIndex + 2 < args.Length) ? args[execOutAppendIndex + 2] : "{}";
 
     try
     {
-        var tools = new DynamicTools();
-        var result = tools.CallDynamicFunction(functionName, argsJson);
+        var tools = new ScriptTools();
+        var result = tools.CallScript(functionName, argsJson);
         Console.Write(result);
 
         var cleanResult = StripOutputInstructions(result);
@@ -101,14 +101,14 @@ if (execOutAppendIndex >= 0 && execOutAppendIndex + 1 < args.Length)
 
 if (execOutIndex >= 0 && execOutIndex + 1 < args.Length)
 {
-    // --exec-out: execute function, write to stdout and persist scheduled-task output
+    // --exec-out: execute script, write to stdout and persist scheduled-task output
     var functionName = args[execOutIndex + 1];
     var argsJson = (execOutIndex + 2 < args.Length) ? args[execOutIndex + 2] : "{}";
 
     try
     {
-        var tools = new DynamicTools();
-        var result = tools.CallDynamicFunction(functionName, argsJson);
+        var tools = new ScriptTools();
+        var result = tools.CallScript(functionName, argsJson);
         Console.Write(result);
 
         var cleanResult = StripOutputInstructions(result);
@@ -129,8 +129,8 @@ if (execIndex >= 0 && execIndex + 1 < args.Length)
 
     try
     {
-        var tools = new DynamicTools();
-        var result = tools.CallDynamicFunction(functionName, argsJson);
+        var tools = new ScriptTools();
+        var result = tools.CallScript(functionName, argsJson);
         Console.Write(result);
     }
     catch (Exception ex)
@@ -145,7 +145,7 @@ if (execIndex >= 0 && execIndex + 1 < args.Length)
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.ClearProviders();
-builder.Services.AddSingleton<DynamicTools>();
+builder.Services.AddSingleton<ScriptTools>();
 builder.Services
     .AddMcpServer(options =>
     {
@@ -153,7 +153,9 @@ builder.Services
         options.ServerInstructions = McpConstants.Instructions;
     })
     .WithStdioServerTransport()
-    .WithTools<DynamicTools>()
-    .WithResources<DynamicResources>();
+    .WithTools<ScriptTools>();
+    // MCP resource exposure disabled intentionally. Keep the type in the codebase
+    // for reference, but do not register it with the server.
+    // .WithResources<ScriptResources>();
 
 await builder.Build().RunAsync();

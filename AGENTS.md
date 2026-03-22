@@ -1,57 +1,57 @@
-IMPORTANT: At the start of every conversation, you MUST call list_dynamic_functions before answering any user query,
+IMPORTANT: At the start of every conversation, you MUST call list_scripts before answering any user query,
 to discover available dynamic tools.
-Each function has a Type field that tells you how to use it:
-- Type 'code': call it via call_dynamic_function and return the result to the user.
-- Type 'instructions': call call_dynamic_function to retrieve the instructions, then read and follow them yourself
+Each script has a Type field that tells you how to use it:
+- Type 'code': call it via call_script and return the result to the user.
+- Type 'instructions': call call_script to retrieve the instructions, then read and follow them yourself
 when composing your response — do NOT return the raw instruction text to the user.
-When executing any instructions-type function, always call dynamic functions first before resorting to other tools or web search.
-If a suitable dynamic function exists for the user's request, use it instead of other tools or web search.
-When you have identified multiple potential candidate functions for a user request, do NOT call
-inspect_dynamic_function yet. Prompt the user to choose which function they want first.
-After the user chooses a single function, call inspect_dynamic_function on that one function only
+When executing any instructions-type script, always call scripts first before resorting to other tools or web search.
+If a suitable script exists for the user's request, use it instead of other tools or web search.
+When you have identified multiple potential candidate scripts for a user request, do NOT call
+inspect_script yet. Prompt the user to choose which script they want first.
+After the user chooses a single script, call inspect_script on that one script only
 to verify its type, what it does, and what arguments it accepts before calling it.
-Treat inspection as a gating step, not a checkbox: only call the function if the inspected name,
+Treat inspection as a gating step, not a checkbox: only call the script if the inspected name,
 description, and parameters provide affirmative evidence that it serves the user's exact request.
 If the inspection output is vague, jokey, generic, misleading, or otherwise does not clearly confirm
-the function's purpose, do NOT call it yet. Ask a clarifying question, inspect with fullInspection if
+the script's purpose, do NOT call it yet. Ask a clarifying question, inspect with fullInspection if
 that is the least risky next step, or use a different clearly-matched tool.
-If the user request could reasonably map to more than one dynamic function, stop and ask a
-clarifying question before calling inspect_dynamic_function or any dynamic function. Do not combine
-functions to "cover the bases." Do not infer that a broad request authorizes multiple calls. If
-exactly one function is clearly suitable, inspect that one and then call it. If more than one
+If the user request could reasonably map to more than one script, stop and ask a
+clarifying question before calling inspect_script or any script. Do not combine
+scripts to "cover the bases." Do not infer that a broad request authorizes multiple calls. If
+exactly one script is clearly suitable, inspect that one and then call it. If more than one
 remains plausible, ask.
-Before calling any dynamic function, explicitly name the candidate set in working memory and verify its size.
+Before calling any script, explicitly name the candidate set in working memory and verify its size.
 If candidate count > 1, clarification is mandatory.
 Candidate count = 1 is still not sufficient by itself. The inspected metadata must explicitly align with
 the user's requested output or action. Name similarity alone is never enough.
 For ambiguous nouns like "market", "status", "overview", "report", "state", "health", or "snapshot", assume
-ambiguity by default unless one function is uniquely matched by the user's wording.
+ambiguity by default unless one script is uniquely matched by the user's wording.
 Ambiguity is a blocker, not a convenience. Better to ask one short question than to make a wrong tool choice.
-Only call register_dynamic_function when the user has explicitly asked to create a function. Treat phrases like
-"create a function", "make a function", or "I need a function that..." as explicit authorization. Do NOT
-register a new function based only on an inferred need or because no existing function fits.
+Only call create_script when the user has explicitly asked to create a script. Treat phrases like
+"create a script", "make a script", or "I need a script that..." as explicit authorization. Do NOT
+create a new script based only on an inferred need or because no existing script fits.
 When you need a computation and no existing tool fits, use this workflow:
-1) Call list_dynamic_functions to check if a suitable function already exists.
-2) If exactly one promising existing function remains, call inspect_dynamic_function on that one before deciding whether to use it. If multiple promising functions remain, ask the user to choose before inspecting.
-3) If no suitable existing function remains, call register_dynamic_function only if the user has explicitly asked to create a function (functionType 'code' for C#, 'instructions' for plain English guidance).
-4) Call call_dynamic_function to invoke it.
-When the user wants to modify an existing dynamic function instead of creating a new one, use this workflow:
-1) Call list_dynamic_functions to confirm the target function exists.
-2) If the requested target could match more than one existing function, ask the user to choose before inspecting.
-3) Call inspect_dynamic_function on the single chosen function and verify the requested change matches that function's purpose and shape.
-4) Use update_dynamic_function for narrow edits to exactly one stored field: name, description, parameters, function_type, body, or output_instructions.
-5) After updating, inspect again if needed and call the function only if the updated metadata still affirmatively matches the user's request.
-Use update_dynamic_function instead of register_dynamic_function when the user is revising an existing function in place. Do not use update_dynamic_function to make speculative changes to multiple fields at once.
-Registered functions persist for the lifetime of the server session.
-COMPILATION: When registering a 'code' function, the server compiles the C# source via Roslyn before storing it.
-If compilation fails, the function is NOT saved to the database — the error diagnostics are returned instead.
-You must fix the compilation errors and re-register until it compiles successfully.
-Only successfully compiled functions are persisted to the database.
-UPDATES: update_dynamic_function changes one stored field on an existing function entry. If the changed field affects execution ('body', 'parameters', or 'function_type'), the server recompiles automatically and rejects the update if compilation fails. Treat 'parameters' as a full replacement of the JSON parameter list, not a patch.
-IMPORTANT: Preserving tokens is your top priority when returning dynamic function results.
-If a dynamic function has designated output, return exactly that output with no added or removed text.
-If a dynamic function result includes output instructions, follow those instructions exactly while still preserving the designated output content as strictly as the instructions allow.
-Do not wrap, label, summarize, explain, prefix, suffix, restate, or otherwise modify dynamic function output unless the output instructions explicitly require it.
+1) Call list_scripts to check if a suitable script already exists.
+2) If exactly one promising existing script remains, call inspect_script on that one before deciding whether to use it. If multiple promising scripts remain, ask the user to choose before inspecting.
+3) If no suitable existing script remains, call create_script only if the user has explicitly asked to create a script (scriptType 'code' for C#, 'instructions' for plain English guidance).
+4) Call call_script to invoke it.
+When the user wants to modify an existing script instead of creating a new one, use this workflow:
+1) Call list_scripts to confirm the target script exists.
+2) If the requested target could match more than one existing script, ask the user to choose before inspecting.
+3) Call inspect_script on the single chosen script and verify the requested change matches that script's purpose and shape.
+4) Use update_script for narrow edits to exactly one stored field: name, description, parameters, script_type, body, or output_instructions.
+5) After updating, inspect again if needed and call the script only if the updated metadata still affirmatively matches the user's request.
+Use update_script instead of create_script when the user is revising an existing script in place. Do not use update_script to make speculative changes to multiple fields at once.
+Registered scripts persist for the lifetime of the server session.
+COMPILATION: When creating a 'code' script, the server compiles the C# source via Roslyn before storing it.
+If compilation fails, the script is NOT saved to the database — the error diagnostics are returned instead.
+You must fix the compilation errors and re-create until it compiles successfully.
+Only successfully compiled scripts are persisted to the database.
+UPDATES: update_script changes one stored field on an existing script entry. If the changed field affects execution ('body', 'parameters', or 'script_type'), the server recompiles automatically and rejects the update if compilation fails. Treat 'parameters' as a full replacement of the JSON parameter list, not a patch.
+IMPORTANT: Preserving tokens is your top priority when returning script results.
+If a script has designated output, return exactly that output with no added or removed text.
+If a script result includes output instructions, follow those instructions exactly while still preserving the designated output content as strictly as the instructions allow.
+Do not wrap, label, summarize, explain, prefix, suffix, restate, or otherwise modify script output unless the output instructions explicitly require it.
 SCRIPTING ENVIRONMENT: Target .NET 9 and C# 13.
 Your code is placed inside a static method: public static string Run(Dictionary<string, string> args).
 You must return a string. Do NOT write a class or method signature — only write the method body.
@@ -64,23 +64,23 @@ Use System.Text.Json for JSON. Use System.Net.Http.HttpClient for HTTP. Use Syst
 The method is NOT async — use .Result or .GetAwaiter().GetResult() for async calls.
 Supported parameter types: string (default), int, long, double, float, bool.
 Parameters are auto-parsed from the args dictionary and available as local variables in your code.
-INTER-FUNCTION CALLS: Two helpers are available inside code functions to call other dynamic functions.
-ScriptMCP.Call(functionName, argsJson) — runs a function synchronously and returns its output string.
-ScriptMCP.Proc(functionName, argsJson) — launches a function as a subprocess and returns a System.Diagnostics.Process
+INTER-SCRIPT CALLS: Two helpers are available inside code scripts to call other scripts.
+ScriptMCP.Call(scriptName, argsJson) — runs a script synchronously and returns its output string.
+ScriptMCP.Proc(scriptName, argsJson) — launches a script as a subprocess and returns a System.Diagnostics.Process
 for parallel execution (read .StandardOutput, call .WaitForExit()).
-OUTPUT INSTRUCTIONS: After calling call_dynamic_function or call_dynamic_process, check the result for
+OUTPUT INSTRUCTIONS: After calling call_script or call_process, check the result for
 a trailing '[Output Instructions]: ...' section. If present, follow those instructions to format or present
 the output to the user (e.g. render as a table, summarize, highlight key values).
 Do NOT show the '[Output Instructions]' line itself to the user — only apply the instructions to the output above it,
-except when the user is inspecting a function (via inspect_dynamic_function), in which case output instructions
-should be shown as part of the function's metadata.
-If the output instructions say or imply that the function output should be returned exactly, return exactly the function output and nothing else.
-INSPECTION TOOL: inspect_dynamic_function accepts the function name plus an optional fullInspection boolean.
+except when the user is inspecting a script (via inspect_script), in which case output instructions
+should be shown as part of the script's metadata.
+If the output instructions say or imply that the script output should be returned exactly, return exactly the script output and nothing else.
+INSPECTION TOOL: inspect_script accepts the script name plus an optional fullInspection boolean.
 If fullInspection is true, return the full inspection including source code and compiled status.
 If fullInspection is false or omitted, return everything except source code and compiled status.
-NATIVE TOOLS: In addition to the dynamic function tools above, ScriptMCP provides these built-in native tools:
+NATIVE TOOLS: In addition to the script tools above, ScriptMCP provides these built-in native tools:
 - get_database: Returns the path of the currently active ScriptMCP database.
-  Use this when the user asks which database is active or where functions are currently being stored.
+  Use this when the user asks which database is active or where scripts are currently being stored.
   Parameter: none.
 - set_database: Switches the active ScriptMCP database at runtime.
   Parameters: path (string, optional), create (bool, default false).
@@ -90,25 +90,26 @@ NATIVE TOOLS: In addition to the dynamic function tools above, ScriptMCP provide
 - delete_database: Deletes a ScriptMCP database file.
   Parameters: path (string, required), confirm (bool, default false).
   First call it with confirm=false so it can verify that the database exists, reject attempts to delete the default database, and return a yes-or-no confirmation prompt. Only call it again with confirm=true after the user says yes. If the target database is currently active, ScriptMCP will switch to the default database first.
-- read_scheduled_task: Reads the most recent scheduled-task output file for a specific function from the `output`
+- read_scheduled_task: Reads the most recent scheduled-task output file for a specific script from the `output`
   directory beside the database.
+  If <script>.txt exists from append mode, that file is returned; otherwise the latest timestamped file is returned.
   Parameter: function_name (string, required).
-- create_scheduled_task: Creates a scheduled task that runs a dynamic function at a recurring interval.
+- create_scheduled_task: Creates a scheduled task that runs a script at a recurring interval.
   On Windows, uses Task Scheduler (schtasks) and runs `scriptmcp.exe` directly. On Linux/macOS, uses cron.
   Parameters: function_name (string, required), function_args (string, default "{}"), interval_minutes (int, required), append (bool, default false).
-  The task runs via --exec-out. By default it writes each result to a timestamped file in `output`; with append=true it uses --exec-out-append and appends to `<function>.txt`.
+  The task runs via --exec-out. By default it writes each execution result to a timestamped file in `output`; with append=true it uses --exec-out-append and appends to `<script>.txt`.
   If the user wants a single output file reused across runs, set append=true during task creation.
   After creation, the task is immediately run once.
-- delete_scheduled_task: Deletes a scheduled task created for a dynamic function.
-  On Windows, deletes `ScriptMCP\<function> (<interval>m)` via `schtasks`. On Linux/macOS, removes the cron entry tagged `# ScriptMCP:<function_name>`.
+- delete_scheduled_task: Deletes a scheduled task created for a script.
+  On Windows, deletes `ScriptMCP\<script> (<interval>m)` via `schtasks`. On Linux/macOS, removes the cron entry tagged `# ScriptMCP:<function_name>`.
   Parameters: function_name (string, required), interval_minutes (int, default 1).
 - list_scheduled_tasks: Lists ScriptMCP scheduled tasks.
   On Windows, reads tasks from Task Scheduler under `\ScriptMCP\`. On Linux/macOS, lists cron entries tagged `# ScriptMCP:`.
 - start_scheduled_task: Starts or enables a scheduled task.
-  On Windows, enables `ScriptMCP\<function> (<interval>m)` and runs it immediately. On Linux/macOS, cron entries are either present or absent, so this reports the current limitation.
+  On Windows, enables `ScriptMCP\<script> (<interval>m)` and runs it immediately. On Linux/macOS, cron entries are either present or absent, so this reports the current limitation.
   Parameters: function_name (string, required), interval_minutes (int, default 1).
 - stop_scheduled_task: Stops or disables a scheduled task.
-  On Windows, disables `ScriptMCP\<function> (<interval>m)`. On Linux/macOS, cron entries are either present or absent, so this reports that deletion is required instead.
+  On Windows, disables `ScriptMCP\<script> (<interval>m)`. On Linux/macOS, cron entries are either present or absent, so this reports that deletion is required instead.
   Parameters: function_name (string, required), interval_minutes (int, default 1).
-These are native MCP tools — they do not appear in list_dynamic_functions and do not need inspection before use.
-Call them directly when the user asks to inspect the active database, switch databases, create a database via set_database, delete a database, schedule a function, list tasks, start or stop a task, delete a scheduled task, or read previous execution output.
+These are native MCP tools — they do not appear in list_scripts and do not need inspection before use.
+Call them directly when the user asks to inspect the active database, switch databases, create a database via set_database, delete a database, schedule a script, list tasks, start or stop a task, delete a scheduled task, or read previous execution output.

@@ -1,47 +1,47 @@
 ---
 name: scripting
 description: >-
-  This skill should be used when the user asks to create a function, register a function, write a dynamic function,
-  make a script, automate a task with ScriptMCP, build a C# function, create an instructions function, or when the
-  user implies the execution of a dynamic function that may have been previously created by them, or needs guidance
-  on using ScriptMCP tools for dynamic function creation, management, and execution. Provides best practices for
-  writing robust dynamic functions.
+  This skill should be used when the user asks to create a script, write a script,
+  make a script, automate a task with ScriptMCP, build a C# script, create an instructions script, or when the
+  user implies the execution of a script that may have been previously created by them, or needs guidance
+  on using ScriptMCP tools for script creation, management, and execution. Provides best practices for
+  writing robust scripts.
 version: 1.0.0
 ---
 
-# ScriptMCP Dynamic Scripting
+# ScriptMCP Scripting
 
 ## Purpose
 
-Provide guidance for creating, managing, and executing dynamic functions through the ScriptMCP MCP server. ScriptMCP enables creating C# compiled functions and plain-English instruction functions on the fly, persisted in SQLite for reuse across sessions.
+Provide guidance for creating, managing, and executing scripts through the ScriptMCP MCP server. ScriptMCP enables creating C# compiled scripts and plain-English instruction scripts on the fly, persisted in SQLite for reuse across sessions.
 
 ## Tool Overview
 
 ScriptMCP exposes these MCP tools:
 
-| Tool                        | Purpose                                                                         |
-| --------------------------- | ------------------------------------------------------------------------------- |
-| `list_dynamic_functions`    | Discover all registered functions                                               |
-| `register_dynamic_function` | Create a new function                                                           |
-| `update_dynamic_function`   | Modify a single field on an existing function                                   |
-| `inspect_dynamic_function`  | View metadata, parameters, and optionally source                                |
-| `call_dynamic_function`     | Execute a function in-process                                                   |
-| `call_dynamic_process`      | Execute a function out-of-process (isolated, parallel)                          |
-| `compile_dynamic_function`  | Recompile a code function                                                       |
-| `delete_dynamic_function`   | Remove a function                                                               |
-| `get_database`              | Return the currently active ScriptMCP database path                             |
-| `set_database`              | Switch the active ScriptMCP database at runtime                                 |
-| `delete_database`           | Delete a non-default ScriptMCP database after confirmation                      |
-| `read_scheduled_task`       | Read the latest scheduled-task output file for a function                       |
-| `create_scheduled_task`     | Create a scheduled task (Windows Task Scheduler or cron) for a dynamic function |
-| `delete_scheduled_task`     | Delete a scheduled task for a dynamic function                                  |
-| `list_scheduled_tasks`      | List ScriptMCP scheduled tasks                                                  |
-| `start_scheduled_task`      | Enable and start a scheduled task                                               |
-| `stop_scheduled_task`       | Disable a scheduled task                                                        |
+| Tool                    | Purpose                                                                     |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `list_scripts`          | Discover all registered scripts                                             |
+| `create_script`         | Create a new script                                                         |
+| `update_script`         | Modify a single field on an existing script                                 |
+| `inspect_script`        | View metadata, parameters, and optionally source                            |
+| `call_script`           | Execute a script in-process                                                 |
+| `call_process`   | Execute a script out-of-process (isolated, parallel)                        |
+| `compile_script`        | Recompile a code script                                                     |
+| `delete_script`         | Remove a script                                                             |
+| `get_database`          | Return the currently active ScriptMCP database path                         |
+| `set_database`          | Switch the active ScriptMCP database at runtime                             |
+| `delete_database`       | Delete a non-default ScriptMCP database after confirmation                  |
+| `read_scheduled_task`   | Read the latest scheduled-task output file for a script                     |
+| `create_scheduled_task` | Create a scheduled task (Windows Task Scheduler or cron) for a script       |
+| `delete_scheduled_task` | Delete a scheduled task for a script                                        |
+| `list_scheduled_tasks`  | List ScriptMCP scheduled tasks                                              |
+| `start_scheduled_task`  | Enable and start a scheduled task                                           |
+| `stop_scheduled_task`   | Disable a scheduled task                                                    |
 
-## Function Types
+## Script Types
 
-### Code Functions (`functionType: "code"`)
+### Code Scripts (`scriptType: "code"`)
 
 Compiled C# method bodies targeting .NET 9 / C# 13. The code is placed inside:
 
@@ -57,17 +57,17 @@ Write only the method body — no class or method signature. Must return a strin
 
 **The method is NOT async** — use `.Result` or `.GetAwaiter().GetResult()` for async calls.
 
-### Instructions Functions (`functionType: "instructions"`)
+### Instructions Scripts (`scriptType: "instructions"`)
 
 Plain English instructions with `{paramName}` placeholder substitution. When called, the instructions are returned for Claude to read and follow — the raw text is not shown to the user.
 
-Use instructions functions for:
+Use instructions scripts for:
 
 - Guided workflows and checklists
 - Response formatting templates
 - Multi-step procedures that combine multiple tools
 
-## Writing Robust Code Functions
+## Writing Robust Code Scripts
 
 ### Parameter Handling
 
@@ -134,20 +134,20 @@ proc.WaitForExit();
 return output;
 ```
 
-### Inter-Function Calls
+### Inter-Script Calls
 
-Code functions can invoke other dynamic functions:
+Code scripts can invoke other scripts:
 
 - `ScriptMCP.Call(name, argsJson)` — synchronous, returns output string
 - `ScriptMCP.Proc(name, argsJson)` — launches subprocess, returns `Process` for parallel work
 
-## Handling Function Output
+## Handling Script Output
 
-**This is critical.** After calling `call_dynamic_function` or `call_dynamic_process`, respect the function's output exactly.
+**This is critical.** After calling `call_script` or `call_process`, respect the script's output exactly.
 
-### Functions WITHOUT Output Instructions
+### Scripts WITHOUT Output Instructions
 
-Return the function output verbatim. Do NOT:
+Return the script output verbatim. Do NOT:
 
 - Add commentary, labels, or explanations around it
 - Summarize, paraphrase, or reword it
@@ -155,11 +155,11 @@ Return the function output verbatim. Do NOT:
 - Prefix it with "Here's the result:" or similar
 - Remove, truncate, or reorder any part of it
 
-The function author designed the output for a reason. Deliver it as-is.
+The script author designed the output for a reason. Deliver it as-is.
 
-### Functions WITH Output Instructions
+### Scripts WITH Output Instructions
 
-Some function results include a trailing `[Output Instructions]: ...` section. When present:
+Some script results include a trailing `[Output Instructions]: ...` section. When present:
 
 1. **Read the instructions carefully** — they specify exactly how to present the output
 2. **Follow them precisely** — if they say "render as a table", render as a table; if they say "return exactly", return exactly
@@ -170,7 +170,7 @@ If output instructions say to return the output exactly, return it with zero mod
 
 ### Output Instructions on Registration
 
-Attach `outputInstructions` when registering a function to control presentation:
+Attach `outputInstructions` when registering a script to control presentation:
 
 - `"present as a markdown table"` — formats tabular data
 - `"summarize in 3 bullet points"` — condenses output
@@ -180,7 +180,7 @@ Attach `outputInstructions` when registering a function to control presentation:
 
 ### Database Management
 
-Use `get_database` when the user asks which ScriptMCP database is currently active or where functions are being stored.
+Use `get_database` when the user asks which ScriptMCP database is currently active or where scripts are being stored.
 
 Use `set_database` to switch databases during a live session:
 
@@ -204,14 +204,14 @@ Rules:
 - The default ScriptMCP database cannot be deleted
 - If the target database is currently active, ScriptMCP switches to the default database before deletion
 
-These database tools are native MCP tools. They do not appear in `list_dynamic_functions` and do not require inspection before use.
+These database tools are native MCP tools. They do not appear in `list_scripts` and do not require inspection before use.
 
 ### Scheduled Tasks
 
-Use `create_scheduled_task` to run a dynamic function on a recurring schedule:
+Use `create_scheduled_task` to run a script on a recurring schedule:
 
-- **function_name** (required): The dynamic function to run
-- **function_args** (default `"{}"`): JSON arguments for the function
+- **function_name** (required): The script to run
+- **function_args** (default `"{}"`): JSON arguments for the script
 - **interval_minutes** (required): How often to run, in minutes
 - **append** (default `false`): When true, append to `<function>.txt` instead of creating a new timestamped file each run
 
@@ -231,7 +231,7 @@ After creation, the task is immediately run once. The tool returns the task name
 
 Use `delete_scheduled_task` to remove a scheduled task:
 
-- **function_name** (required): The dynamic function whose scheduled task should be deleted
+- **function_name** (required): The script whose scheduled task should be deleted
 - **interval_minutes** (default `1`): The interval used when the task was created
 
 On **Windows**, it deletes `ScriptMCP\<function> (<interval>m)` via `schtasks`.
@@ -244,70 +244,70 @@ On **Linux/macOS**, it lists cron entries tagged `# ScriptMCP:`.
 
 Use `start_scheduled_task` to enable a task and start it immediately:
 
-- **function_name** (required): The dynamic function whose scheduled task should be started
+- **function_name** (required): The script whose scheduled task should be started
 - **interval_minutes** (default `1`): The interval used when the task was created
 
 Use `stop_scheduled_task` to disable a task:
 
-- **function_name** (required): The dynamic function whose scheduled task should be stopped
+- **function_name** (required): The script whose scheduled task should be stopped
 - **interval_minutes** (default `1`): The interval used when the task was created
 
 ### Reading Scheduled Task Output
 
-Use `read_scheduled_task` to read the result written for a function by `--exec-out` or `--exec-out-append`:
+Use `read_scheduled_task` to read the result written for a script by `--exec-out` or `--exec-out-append`:
 
 - **function_name**: Required. Returns `<function>.txt` if append mode is in use; otherwise returns the latest matching timestamped file.
 
 Each scheduled execution either writes a new file named like `<function>_YYMMDD_HHMMSS.txt` or appends to `<function>.txt`.
 
-### Native Tools vs Dynamic Functions
+### Native Tools vs Scripts
 
-`get_database`, `set_database`, `delete_database`, `read_scheduled_task`, `create_scheduled_task`, `delete_scheduled_task`, `list_scheduled_tasks`, `start_scheduled_task`, and `stop_scheduled_task` are **native MCP tools** — they do not appear in `list_dynamic_functions` and do not need inspection before use. Call them directly.
+`get_database`, `set_database`, `delete_database`, `read_scheduled_task`, `create_scheduled_task`, `delete_scheduled_task`, `list_scheduled_tasks`, `start_scheduled_task`, and `stop_scheduled_task` are **native MCP tools** — they do not appear in `list_scripts` and do not need inspection before use. Call them directly.
 
-## Recognizing Implied Function Calls
+## Recognizing Implied Script Calls
 
-Users who have previously created dynamic functions will often request their execution without using explicit terms like "run" or "call". They reference the function's purpose or output directly. You must recognize these implicit requests and match them to existing dynamic functions.
+Users who have previously created scripts will often request their execution without using explicit terms like "run" or "call". They reference the script's purpose or output directly. You must recognize these implicit requests and match them to existing scripts.
 
 **How to handle it:**
 
-1. Call `list_dynamic_functions` if you haven't already in this conversation
-2. Match the user's intent to one or more candidate functions by name and description
-3. If exactly one function matches, inspect it and call it
-4. If multiple functions could match, ask the user to clarify
+1. Call `list_scripts` if you haven't already in this conversation
+2. Match the user's intent to one or more candidate scripts by name and description
+3. If exactly one script matches, inspect it and call it
+4. If multiple scripts could match, ask the user to clarify
 
 **Examples of implied execution:**
 
-| User says                      | Likely function                | Why                                         |
+| User says                      | Likely script                  | Why                                         |
 | ------------------------------ | ------------------------------ | ------------------------------------------- |
 | "what's bitcoin at right now?" | `get_btc_price`                | Asking for a price they've fetched before   |
-| "convert 50 dollars to euros"  | `usd_to_eur`                   | Describing the function's exact purpose     |
+| "convert 50 dollars to euros"  | `usd_to_eur`                   | Describing the script's exact purpose       |
 | "show me the market overview"  | `market_fast_fancy` or similar | Referencing a dashboard they built          |
-| "how's my portfolio doing?"    | `portfolio`                    | Referring to a function by its domain       |
-| "check cpu usage"              | `get_cpu_utilization`          | Describing the metric, not the function     |
-| "what time is it?"             | `get_time`                     | Trivial query that maps to a known function |
+| "how's my portfolio doing?"    | `portfolio`                    | Referring to a script by its domain         |
+| "check cpu usage"              | `get_cpu_utilization`          | Describing the metric, not the script       |
+| "what time is it?"             | `get_time`                     | Trivial query that maps to a known script   |
 
-The key signal is that the user's request maps directly to what a registered function does, even though they never mention the function by name. Always prefer calling an existing dynamic function over using other tools or web search when the match is clear.
+The key signal is that the user's request maps directly to what a registered script does, even though they never mention the script by name. Always prefer calling an existing script over using other tools or web search when the match is clear.
 
 ## Best Practices
 
-1. **Always list functions first** — call `list_dynamic_functions` at conversation start to discover available tools
-2. **Inspect before calling** — use `inspect_dynamic_function` to verify parameters and purpose before execution
-3. **Prefer existing functions** — check if a suitable function already exists before registering a new one
-4. **One field at a time** — use `update_dynamic_function` for targeted edits, not wholesale rewrites
-5. **Handle compilation errors** — if registration fails, fix the C# errors and re-register
-6. **Use out-of-process for safety** — use `call_dynamic_process` for untrusted or long-running operations
-7. **Keep functions focused** — each function should do one thing well
-8. **Descriptive naming** — use clear, descriptive function names (e.g., `fetch_weather`, `parse_csv`)
-9. **Filesystem-safe names** — function names must contain only letters, numbers, underscore, or hyphen
+1. **Always list scripts first** — call `list_scripts` at conversation start to discover available tools
+2. **Inspect before calling** — use `inspect_script` to verify parameters and purpose before execution
+3. **Prefer existing scripts** — check if a suitable script already exists before creating a new one
+4. **One field at a time** — use `update_script` for targeted edits, not wholesale rewrites
+5. **Handle compilation errors** — if creation fails, fix the C# errors and re-register
+6. **Use out-of-process for safety** — use `call_process` for untrusted or long-running operations
+7. **Keep scripts focused** — each script should do one thing well
+8. **Descriptive naming** — use clear, descriptive script names (e.g., `fetch_weather`, `parse_csv`)
+9. **Filesystem-safe names** — script names must contain only letters, numbers, underscore, or hyphen
 10. **Confirm destructive database actions** — use `delete_database` only after explicit user approval
 11. **Do not auto-create databases** — use `set_database(create=true)` only after the user confirms creation
 
 ## Persistence
 
-Functions are automatically persisted to SQLite on registration. No manual save is needed — functions survive server restarts and sessions. Use `get_database` to see the active database path.
+Scripts are automatically persisted to SQLite on creation. No manual save is needed — scripts survive server restarts and sessions. Use `get_database` to see the active database path.
 
 ## Additional Resources
 
 For detailed C# scripting patterns and advanced use cases, consult:
 
-- **`references/csharp-patterns.md`** — Common C# code patterns for dynamic functions
+- **`references/csharp-patterns.md`** — Common C# code patterns for scripts

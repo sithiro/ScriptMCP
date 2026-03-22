@@ -7,23 +7,23 @@ public sealed class McpConstantsTests
     [Fact]
     public void ResolveSavePathUsesDbArgumentWhenProvided()
     {
-        var originalPath = DynamicTools.SavePath;
+        var originalPath = ScriptTools.SavePath;
         try
         {
             var expected = Path.GetFullPath(Path.Combine("ScriptMCP.Tests", ".testdata", "resolve-save-path.db"));
             McpConstants.ResolveSavePath([McpConstants.DatabaseArgumentName, expected]);
-            Assert.Equal(expected, DynamicTools.SavePath);
+            Assert.Equal(expected, ScriptTools.SavePath);
         }
         finally
         {
-            DynamicTools.SavePath = originalPath;
+            ScriptTools.SavePath = originalPath;
         }
     }
 
     [Fact]
     public void ResolveSavePathUsesDefaultDataDirectoryWhenDbArgumentIsRelative()
     {
-        var originalPath = DynamicTools.SavePath;
+        var originalPath = ScriptTools.SavePath;
         try
         {
             McpConstants.ResolveSavePath([McpConstants.DatabaseArgumentName, "test.db"]);
@@ -32,11 +32,11 @@ public sealed class McpConstantsTests
                 "ScriptMCP",
                 "test.db");
 
-            Assert.Equal(Path.GetFullPath(expected), DynamicTools.SavePath);
+            Assert.Equal(Path.GetFullPath(expected), ScriptTools.SavePath);
         }
         finally
         {
-            DynamicTools.SavePath = originalPath;
+            ScriptTools.SavePath = originalPath;
         }
     }
 }

@@ -3,7 +3,7 @@ using ScriptMCP.Library;
 
 namespace ScriptMCP.Tests;
 
-[Collection("DynamicTools tests")]
+[Collection("ScriptTools tests")]
 public sealed class CliOutputModeTests
 {
     private readonly TestDatabaseFixture _fixture;
@@ -16,9 +16,9 @@ public sealed class CliOutputModeTests
     [Fact]
     public void ExecOutCreatesTimestampedOutputFile()
     {
-        var tools = new DynamicTools();
+        var tools = new ScriptTools();
         var name = UniqueName("test_cli_write_new");
-        tools.RegisterDynamicFunction(
+        tools.CreateScript(
             name: name,
             description: "CLI write new",
             parameters: "[]",
@@ -30,8 +30,8 @@ public sealed class CliOutputModeTests
 
         RunConsole("--exec-out", name, "{}");
 
-        var outputDir = DynamicTools.GetScheduledTaskOutputDirectory();
-        var prefix = DynamicTools.GetScheduledTaskFilePrefix(name);
+        var outputDir = ScriptTools.GetScheduledTaskOutputDirectory();
+        var prefix = ScriptTools.GetScheduledTaskFilePrefix(name);
         var files = Directory.EnumerateFiles(outputDir, $"{prefix}_*.txt").ToList();
         Assert.Single(files);
 
@@ -42,9 +42,9 @@ public sealed class CliOutputModeTests
     [Fact]
     public void ExecOutAppendAppendsToStableOutputFile()
     {
-        var tools = new DynamicTools();
+        var tools = new ScriptTools();
         var name = UniqueName("test_cli_write_append");
-        tools.RegisterDynamicFunction(
+        tools.CreateScript(
             name: name,
             description: "CLI append",
             parameters: "[]",
@@ -57,7 +57,7 @@ public sealed class CliOutputModeTests
         RunConsole("--exec-out-append", name, "{}");
         RunConsole("--exec-out-append", name, "{}");
 
-        var appendPath = DynamicTools.GetScheduledTaskAppendOutputPath(name);
+        var appendPath = ScriptTools.GetScheduledTaskAppendOutputPath(name);
         Assert.True(File.Exists(appendPath));
 
         var lines = File.ReadAllLines(appendPath)
@@ -70,11 +70,11 @@ public sealed class CliOutputModeTests
     [Fact]
     public void ExecWithDbArgumentPropagatesToScriptMcpCallSubprocess()
     {
-        var tools = new DynamicTools();
+        var tools = new ScriptTools();
         var innerName = UniqueName("test_cli_inner");
         var outerName = UniqueName("test_cli_outer");
 
-        tools.RegisterDynamicFunction(
+        tools.CreateScript(
             name: innerName,
             description: "Inner function",
             parameters: "[]",
@@ -82,7 +82,7 @@ public sealed class CliOutputModeTests
             functionType: "code",
             outputInstructions: "");
 
-        tools.RegisterDynamicFunction(
+        tools.CreateScript(
             name: outerName,
             description: "Outer function",
             parameters: "[]",
@@ -124,11 +124,11 @@ public sealed class CliOutputModeTests
 
     private void ResetFunctionOutputFiles(string functionName)
     {
-        var outputDir = DynamicTools.GetScheduledTaskOutputDirectory();
+        var outputDir = ScriptTools.GetScheduledTaskOutputDirectory();
         if (!Directory.Exists(outputDir))
             return;
 
-        var prefix = DynamicTools.GetScheduledTaskFilePrefix(functionName);
+        var prefix = ScriptTools.GetScheduledTaskFilePrefix(functionName);
         foreach (var path in Directory.EnumerateFiles(outputDir, $"{prefix}*.txt"))
             File.Delete(path);
     }
