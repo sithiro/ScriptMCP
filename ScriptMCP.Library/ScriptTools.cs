@@ -39,6 +39,15 @@ internal sealed class CompilationOutcome
 {
     public byte[]? Bytes { get; init; }
     public string? Errors { get; init; }
+    public List<string>? ExternalReferencePaths { get; init; }
+}
+
+internal sealed class PreprocessResult
+{
+    public string CleanedBody { get; init; } = "";
+    public List<string> DllReferences { get; init; } = new();
+    public List<string> LoadPaths { get; init; } = new();
+    public string? Error { get; init; }
 }
 
 // ── ScriptTools ──────────────────────────────────────────────────────────────
@@ -236,6 +245,25 @@ public class ScriptTools
             using var alter3 = conn.CreateCommand();
             alter3.CommandText = "ALTER TABLE scripts ADD COLUMN code_format TEXT";
             alter3.ExecuteNonQuery();
+        }
+
+        // Migrate: add external_refs column if missing (existing DBs)
+        bool hasExternalRefs = false;
+        using var pragma4 = conn.CreateCommand();
+        pragma4.CommandText = "PRAGMA table_info(scripts)";
+        using (var reader4 = pragma4.ExecuteReader())
+        {
+            while (reader4.Read())
+            {
+                if (string.Equals(reader4.GetString(1), "external_refs", StringComparison.OrdinalIgnoreCase))
+                { hasExternalRefs = true; break; }
+            }
+        }
+        if (!hasExternalRefs)
+        {
+            using var alter4 = conn.CreateCommand();
+            alter4.CommandText = "ALTER TABLE scripts ADD COLUMN external_refs TEXT";
+            alter4.ExecuteNonQuery();
         }
 
         // Backfill: scan existing scripts that have never been scanned (dependencies IS NULL)
@@ -525,6 +553,7 @@ public class ScriptTools
             ValidateScriptName(func.Name);
 
             byte[]? assemblyBytes = null;
+            List<string>? externalRefs = null;
 
             if (!IsInstructions(func))
             {
@@ -532,6 +561,7 @@ public class ScriptTools
                 if (compiled.Bytes == null)
                     return $"Compilation failed:\n{compiled.Errors}";
                 assemblyBytes = compiled.Bytes;
+                externalRefs = compiled.ExternalReferencePaths;
             }
 
             using var conn = new SqliteConnection(ConnectionString);
@@ -547,7 +577,7 @@ public class ScriptTools
             }
             func.Dependencies = DependenciesToCsv(deps);
 
-            InsertScript(conn, func, assemblyBytes);
+            InsertScript(conn, func, assemblyBytes, externalRefs);
 
             return $"{(IsInstructions(func) ? "Instructions" : "Code")} script '{func.Name}' created successfully " +
                    $"with {func.Parameters.Count} parameter(s).";
@@ -748,6 +778,7 @@ public class ScriptTools
         }
 
         byte[]? assemblyBytes = null;
+        List<string>? externalRefs = null;
         if (!IsInstructions(func))
         {
             var compiled = CompileFunction(func);
@@ -755,6 +786,7 @@ public class ScriptTools
                 return $"Update failed: compilation failed after changing '{normalizedField}':\n{compiled.Errors}";
 
             assemblyBytes = compiled.Bytes;
+            externalRefs = compiled.ExternalReferencePaths;
         }
 
         // Auto-compute dependencies unless the user is explicitly setting them
@@ -787,7 +819,8 @@ public class ScriptTools
                 compiled_assembly = @compiled_assembly,
                 output_instructions = @output_instructions,
                 dependencies = @dependencies,
-                code_format = @code_format
+                code_format = @code_format,
+                external_refs = @external_refs
             WHERE name = @original_name";
         updateCmd.Parameters.AddWithValue("@new_name", func.Name);
         updateCmd.Parameters.AddWithValue("@description", func.Description);
@@ -798,6 +831,10 @@ public class ScriptTools
         updateCmd.Parameters.AddWithValue("@output_instructions", (object?)func.OutputInstructions ?? DBNull.Value);
         updateCmd.Parameters.AddWithValue("@dependencies", (object?)func.Dependencies ?? DBNull.Value);
         updateCmd.Parameters.AddWithValue("@code_format", (object?)func.CodeFormat ?? DBNull.Value);
+        updateCmd.Parameters.AddWithValue("@external_refs",
+            externalRefs != null && externalRefs.Count > 0
+                ? JsonSerializer.Serialize(externalRefs)
+                : (object)DBNull.Value);
         updateCmd.Parameters.AddWithValue("@original_name", name);
 
         try
@@ -953,10 +990,14 @@ public class ScriptTools
             Directory.CreateDirectory(resolvedDirectory);
 
         using var updateCmd = conn.CreateCommand();
-        updateCmd.CommandText = "UPDATE scripts SET compiled_assembly = @asm, code_format = @code_format WHERE name = @name";
+        updateCmd.CommandText = "UPDATE scripts SET compiled_assembly = @asm, code_format = @code_format, external_refs = @external_refs WHERE name = @name";
         updateCmd.Parameters.AddWithValue("@name", name);
         updateCmd.Parameters.AddWithValue("@asm", compiled.Bytes);
         updateCmd.Parameters.AddWithValue("@code_format", TopLevelCodeFormat);
+        updateCmd.Parameters.AddWithValue("@external_refs",
+            compiled.ExternalReferencePaths != null && compiled.ExternalReferencePaths.Count > 0
+                ? JsonSerializer.Serialize(compiled.ExternalReferencePaths)
+                : (object)DBNull.Value);
         updateCmd.ExecuteNonQuery();
 
         File.WriteAllBytes(resolvedPath, compiled.Bytes);
@@ -975,7 +1016,7 @@ public class ScriptTools
         conn.Open();
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name, description, parameters, script_type, body, compiled_assembly, output_instructions FROM scripts WHERE name = @name";
+        cmd.CommandText = "SELECT name, description, parameters, script_type, body, compiled_assembly, output_instructions, external_refs FROM scripts WHERE name = @name";
         cmd.Parameters.AddWithValue("@name", name);
 
         using var reader = cmd.ExecuteReader();
@@ -987,8 +1028,11 @@ public class ScriptTools
         var body = reader.GetString(4);
         var parametersJson = reader.GetString(2);
         var outputInstructions = reader.IsDBNull(6) ? null : reader.GetString(6);
+        var externalRefsJson = reader.IsDBNull(7) ? null : reader.GetString(7);
         var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parametersJson, ReadOptions)
                         ?? new List<DynParam>();
+        var externalRefs = !string.IsNullOrEmpty(externalRefsJson)
+            ? JsonSerializer.Deserialize<List<string>>(externalRefsJson) : null;
 
         string result;
 
@@ -1003,7 +1047,7 @@ public class ScriptTools
                 return $"Script '{name}' has no compiled assembly. Re-register it to compile.";
 
             var assemblyBytes = (byte[])reader[5];
-            result = ExecuteCompiledCode(name, assemblyBytes, dynParams, arguments);
+            result = ExecuteCompiledCode(name, assemblyBytes, dynParams, arguments, externalRefs);
         }
 
         if (!string.IsNullOrWhiteSpace(outputInstructions))
@@ -1749,25 +1793,220 @@ public class ScriptTools
         return $"Cron jobs cannot be paused/resumed individually. Remove the entry with delete_scheduled_task to stop it.\n  Tag:      {tag}";
     }
 
+    // ── Preprocessing ────────────────────────────────────────────────────────
+
+    private static readonly Regex DirectiveRegex = new(
+        @"^\s*#(r|load)\s+""(.+)""\s*$", RegexOptions.Compiled);
+
+    private static readonly Regex NuGetSpecRegex = new(
+        @"^nuget:\s*(.+)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Scans the top of a script body for #r and #load directives.
+    /// Directives are only recognised before the first line of real code.
+    /// Returns the cleaned body (directives stripped) plus collected references.
+    /// If an unsupported directive is encountered, Error is set.
+    /// </summary>
+    private static PreprocessResult PreprocessDirectives(string body)
+    {
+        var dllRefs = new List<string>();
+        var loadPaths = new List<string>();
+        var cleanedLines = new List<string>();
+        var directivesDone = false;
+
+        foreach (var line in body.Split('\n'))
+        {
+            if (!directivesDone)
+            {
+                var trimmed = line.TrimStart();
+
+                // Skip blank lines and single-line comments in the directive region
+                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("//"))
+                {
+                    cleanedLines.Add(line);
+                    continue;
+                }
+
+                var match = DirectiveRegex.Match(trimmed);
+                if (match.Success)
+                {
+                    var directive = match.Groups[1].Value;  // "r" or "load"
+                    var value = match.Groups[2].Value;      // path or nuget spec
+
+                    if (directive == "r")
+                    {
+                        if (NuGetSpecRegex.IsMatch(value))
+                            return new PreprocessResult
+                            {
+                                Error = $"#r \"nuget:\" directives are not supported. ScriptMCP is self-contained and does not require the .NET SDK. Use #r \"path.dll\" to reference a local assembly instead.",
+                            };
+
+                        dllRefs.Add(value);
+                    }
+                    else // "load"
+                    {
+                        loadPaths.Add(value);
+                    }
+
+                    // Don't add directive lines to cleaned output
+                    continue;
+                }
+
+                // First non-blank, non-comment, non-directive line — stop scanning
+                directivesDone = true;
+            }
+
+            cleanedLines.Add(line);
+        }
+
+        return new PreprocessResult
+        {
+            CleanedBody = string.Join("\n", cleanedLines),
+            DllReferences = dllRefs,
+            LoadPaths = loadPaths,
+        };
+    }
+
+    /// <summary>
+    /// Recursively resolves #load files, preprocessing each for nested directives.
+    /// Returns accumulated syntax trees and DLL references.
+    /// </summary>
+    private static (List<SyntaxTree> trees, List<string> dllRefs, string? error)
+        ResolveLoadFiles(List<string> loadPaths, string baseDir, HashSet<string>? visited = null, int depth = 0)
+    {
+        visited ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var trees = new List<SyntaxTree>();
+        var dllRefs = new List<string>();
+
+        if (depth > 10)
+            return (trees, dllRefs, "#load directive error: maximum nesting depth (10) exceeded");
+
+        foreach (var loadPath in loadPaths)
+        {
+            var resolvedPath = Path.IsPathRooted(loadPath)
+                ? Path.GetFullPath(loadPath)
+                : Path.GetFullPath(Path.Combine(baseDir, loadPath));
+
+            if (!File.Exists(resolvedPath))
+                return (trees, dllRefs, $"#load directive error: file not found: '{resolvedPath}'");
+
+            if (!visited.Add(resolvedPath))
+                return (trees, dllRefs, $"#load directive error: circular reference detected: '{resolvedPath}'");
+
+            var content = File.ReadAllText(resolvedPath);
+            var nested = PreprocessDirectives(content);
+
+            if (nested.Error != null)
+                return (trees, dllRefs, nested.Error);
+
+            dllRefs.AddRange(nested.DllReferences);
+
+            // Recursively resolve nested #load directives
+            if (nested.LoadPaths.Count > 0)
+            {
+                var loadDir = Path.GetDirectoryName(resolvedPath) ?? baseDir;
+                var (nestedTrees, nestedDlls, nestedError) =
+                    ResolveLoadFiles(nested.LoadPaths, loadDir, visited, depth + 1);
+
+                if (nestedError != null)
+                    return (trees, dllRefs, nestedError);
+
+                trees.AddRange(nestedTrees);
+                dllRefs.AddRange(nestedDlls);
+            }
+
+            trees.Add(CSharpSyntaxTree.ParseText(nested.CleanedBody, path: resolvedPath));
+        }
+
+        return (trees, dllRefs, null);
+    }
+
+    /// <summary>
+    /// Resolves #r "path.dll" references to MetadataReferences.
+    /// Relative paths are resolved against baseDir.
+    /// Returns the references plus resolved absolute paths, or an error.
+    /// </summary>
+    private static (List<MetadataReference> refs, List<string> resolvedPaths, string? error)
+        ResolveDllReferences(List<string> dllPaths, string baseDir)
+    {
+        var refs = new List<MetadataReference>();
+        var resolvedPaths = new List<string>();
+
+        foreach (var dllPath in dllPaths)
+        {
+            var resolvedPath = Path.IsPathRooted(dllPath)
+                ? Path.GetFullPath(dllPath)
+                : Path.GetFullPath(Path.Combine(baseDir, dllPath));
+
+            if (!File.Exists(resolvedPath))
+                return (refs, resolvedPaths, $"#r directive error: file not found: '{resolvedPath}'");
+
+            try
+            {
+                AssemblyName.GetAssemblyName(resolvedPath);
+            }
+            catch
+            {
+                return (refs, resolvedPaths, $"#r directive error: '{resolvedPath}' is not a valid .NET assembly");
+            }
+
+            refs.Add(MetadataReference.CreateFromFile(resolvedPath));
+            resolvedPaths.Add(resolvedPath);
+        }
+
+        return (refs, resolvedPaths, null);
+    }
+
     // ── Compilation ───────────────────────────────────────────────────────────
 
     private static CompilationOutcome CompileFunction(Script func)
     {
-        var supportSource = BuildTopLevelSupportSource(func.Parameters);
         var userSource = func.Body ?? string.Empty;
 
-        var syntaxTrees = new[]
-        {
-            CSharpSyntaxTree.ParseText(supportSource, path: "__ScriptMcpSupport.cs"),
-            CSharpSyntaxTree.ParseText(userSource, path: $"{func.Name}.cs"),
-        };
+        // Phase 1: Preprocess directives
+        var preprocessed = PreprocessDirectives(userSource);
+        if (preprocessed.Error != null)
+            return new CompilationOutcome { Errors = preprocessed.Error };
 
+        // Phase 2: Resolve #load files (recursive, with circular detection)
+        var baseDir = Path.GetDirectoryName(SavePath) ?? Directory.GetCurrentDirectory();
+        var allDllRefs = new List<string>(preprocessed.DllReferences);
+        var syntaxTreeList = new List<SyntaxTree>();
+
+        if (preprocessed.LoadPaths.Count > 0)
+        {
+            var (loadTrees, loadDlls, loadError) =
+                ResolveLoadFiles(preprocessed.LoadPaths, baseDir);
+            if (loadError != null)
+                return new CompilationOutcome { Errors = loadError };
+
+            syntaxTreeList.AddRange(loadTrees);
+            allDllRefs.AddRange(loadDlls);
+        }
+
+        // Add support source and user source trees
+        var supportSource = BuildTopLevelSupportSource(func.Parameters);
+        syntaxTreeList.Add(CSharpSyntaxTree.ParseText(supportSource, path: "__ScriptMcpSupport.cs"));
+        syntaxTreeList.Add(CSharpSyntaxTree.ParseText(preprocessed.CleanedBody, path: $"{func.Name}.cs"));
+
+        // Phase 3: Resolve #r "path.dll" references
         var references = GatherMetadataReferences();
         references.Add(_helperAssembly.Value.reference);
+        var allExternalPaths = new List<string>();
+
+        if (allDllRefs.Count > 0)
+        {
+            var (dllMetaRefs, dllPaths, dllError) = ResolveDllReferences(allDllRefs, baseDir);
+            if (dllError != null)
+                return new CompilationOutcome { Errors = dllError };
+
+            references.AddRange(dllMetaRefs);
+            allExternalPaths.AddRange(dllPaths);
+        }
 
         var compilation = CSharpCompilation.Create(
             assemblyName: $"Script_{func.Name}_{Guid.NewGuid():N}",
-            syntaxTrees: syntaxTrees,
+            syntaxTrees: syntaxTreeList,
             references: references,
             options: new CSharpCompilationOptions(OutputKind.ConsoleApplication)
                 .WithOptimizationLevel(OptimizationLevel.Release));
@@ -1783,7 +2022,11 @@ public class ScriptTools
             return new CompilationOutcome { Errors = string.Join("\n", errors) };
         }
 
-        return new CompilationOutcome { Bytes = peStream.ToArray() };
+        return new CompilationOutcome
+        {
+            Bytes = peStream.ToArray(),
+            ExternalReferencePaths = allExternalPaths.Count > 0 ? allExternalPaths : null,
+        };
     }
 
     private static string BuildTopLevelSupportSource(List<DynParam> parameters)
@@ -2122,7 +2365,7 @@ public class ScriptTools
 
     // ── Execution ─────────────────────────────────────────────────────────────
 
-    private static string ExecuteCompiledCode(string funcName, byte[] assemblyBytes, List<DynParam> dynParams, string arguments)
+    private static string ExecuteCompiledCode(string funcName, byte[] assemblyBytes, List<DynParam> dynParams, string arguments, List<string>? externalRefs = null)
     {
         AssemblyLoadContext? alc = null;
         try
@@ -2132,6 +2375,27 @@ public class ScriptTools
 
             // Load into collectible ALC
             alc = new AssemblyLoadContext(funcName, isCollectible: true);
+
+            // Register resolver for external DLL references (#r directive / NuGet)
+            if (externalRefs != null && externalRefs.Count > 0)
+            {
+                alc.Resolving += (context, assemblyName) =>
+                {
+                    foreach (var refPath in externalRefs)
+                    {
+                        if (!File.Exists(refPath)) continue;
+                        try
+                        {
+                            var refName = AssemblyName.GetAssemblyName(refPath);
+                            if (string.Equals(refName.Name, assemblyName.Name, StringComparison.OrdinalIgnoreCase))
+                                return context.LoadFromAssemblyPath(refPath);
+                        }
+                        catch { /* skip invalid files */ }
+                    }
+                    return null;
+                };
+            }
+
             var helperAssembly = alc.LoadFromStream(new MemoryStream(_helperAssembly.Value.bytes));
             var assembly = alc.LoadFromStream(new MemoryStream(assemblyBytes));
 
@@ -2515,12 +2779,12 @@ public class ScriptTools
         return dependents;
     }
 
-    private static void InsertScript(SqliteConnection conn, Script func, byte[]? assemblyBytes)
+    private static void InsertScript(SqliteConnection conn, Script func, byte[]? assemblyBytes, List<string>? externalRefs = null)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            INSERT OR REPLACE INTO scripts (name, description, parameters, script_type, code_format, body, compiled_assembly, output_instructions, dependencies)
-            VALUES (@name, @description, @parameters, @script_type, @code_format, @body, @compiled_assembly, @output_instructions, @dependencies)";
+            INSERT OR REPLACE INTO scripts (name, description, parameters, script_type, code_format, body, compiled_assembly, output_instructions, dependencies, external_refs)
+            VALUES (@name, @description, @parameters, @script_type, @code_format, @body, @compiled_assembly, @output_instructions, @dependencies, @external_refs)";
         cmd.Parameters.AddWithValue("@name", func.Name);
         cmd.Parameters.AddWithValue("@description", func.Description);
         cmd.Parameters.AddWithValue("@parameters", JsonSerializer.Serialize(func.Parameters));
@@ -2530,6 +2794,10 @@ public class ScriptTools
         cmd.Parameters.AddWithValue("@compiled_assembly", (object?)assemblyBytes ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@output_instructions", (object?)func.OutputInstructions ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@dependencies", (object?)func.Dependencies ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@external_refs",
+            externalRefs != null && externalRefs.Count > 0
+                ? JsonSerializer.Serialize(externalRefs)
+                : (object)DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 

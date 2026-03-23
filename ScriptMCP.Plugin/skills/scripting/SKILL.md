@@ -56,6 +56,8 @@ Support both:
 
 **Available libraries:** All `System.*` assemblies from .NET 9 runtime. Use `System.Text.Json` for JSON, `System.Net.Http.HttpClient` for HTTP, `System.Diagnostics.Process` for shell commands. NuGet packages are NOT available.
 
+**Directives:** Scripts support `#r "path.dll"` to reference external .NET assemblies and `#load "path.cs"` to include C# source files. Directives must appear at the top of the script before any code. See the Directives section below for details.
+
 **The generated entry point is not async-friendly by default** — use `.Result` or `.GetAwaiter().GetResult()` for async calls.
 
 ### Instructions Scripts (`scriptType: "instructions"`)
@@ -67,6 +69,62 @@ Use instructions scripts for:
 - Guided workflows and checklists
 - Response formatting templates
 - Multi-step procedures that combine multiple tools
+
+## Directives
+
+Code scripts support two directives for extending the compilation environment. Directives must appear at the **top of the script**, before any code.
+
+### `#r "path.dll"` — Assembly Reference
+
+Reference an external .NET DLL to use its types in your script:
+
+```csharp
+#r "C:/libs/MathLib.dll"
+
+Console.Write(MathLib.Calculator.CircleArea(5));
+```
+
+Rules:
+- Paths can be absolute or relative (resolved against the database directory)
+- Both forward slashes and backslashes work on Windows
+- The DLL must be a valid .NET assembly
+- `#r "nuget: ..."` is **not supported** — ScriptMCP is self-contained and does not require the .NET SDK
+
+### `#load "path.cs"` — File Inclusion
+
+Include C# source from an external file as a separate compilation unit:
+
+```csharp
+#load "C:/helpers/FormatHelper.cs"
+
+Console.Write(FormatHelper.Banner("Hello!"));
+```
+
+Rules:
+- Loaded files become **separate syntax trees** — code must be in classes or structs, not bare top-level statements
+- Circular references are detected and rejected (max nesting depth: 10)
+- Loaded files can contain their own `#r` and `#load` directives (nested)
+
+### Combining Directives
+
+Both directives can be used together:
+
+```csharp
+#r "C:/libs/DemoLib.dll"
+#load "C:/helpers/FormatHelper.cs"
+
+var greeting = DemoLib.MathHelper.Greet("ScriptMCP");
+Console.Write(FormatHelper.Banner(greeting));
+```
+
+### When to Use Directives vs Inter-Script Calls
+
+| Scenario | Approach |
+|----------|----------|
+| Reuse a compiled .NET library | `#r "path.dll"` |
+| Share helper classes across scripts | `#load "path.cs"` |
+| Call another ScriptMCP script | `ScriptMCP.Call()` or `ScriptMCP.Proc()` |
+| Parallel script execution | `ScriptMCP.Proc()` |
 
 ## Writing Robust Code Scripts
 

@@ -11,6 +11,8 @@
 - `scriptArgs` remains available as a compatibility dictionary parsed from the same `args[0]` JSON
 - NOT async-friendly by default — use `.Result` or `.GetAwaiter().GetResult()`
 - All `System.*` assemblies available; no NuGet packages
+- `#r "path.dll"` to reference external .NET assemblies
+- `#load "path.cs"` to include C# source files (code must be in classes/structs)
 
 ## Authoring Model
 
@@ -266,6 +268,50 @@ var now = DateTime.Now;
 var utc = DateTime.UtcNow;
 Console.Write($"Local: {now:yyyy-MM-dd HH:mm:ss}\nUTC: {utc:yyyy-MM-dd HH:mm:ss}");
 ```
+
+## Directives
+
+### Reference an External DLL (`#r`)
+
+```csharp
+#r "C:/libs/MyLibrary.dll"
+
+var result = MyNamespace.MyClass.DoWork();
+Console.Write(result);
+```
+
+### Include a Helper File (`#load`)
+
+**helpers/format.cs:**
+```csharp
+public static class Fmt
+{
+    public static string Box(string text)
+    {
+        var b = new string('*', text.Length + 4);
+        return $"{b}\n* {text} *\n{b}";
+    }
+}
+```
+
+**Script:**
+```csharp
+#load "C:/helpers/format.cs"
+
+Console.Write(Fmt.Box("Hello!"));
+```
+
+### Combining `#r` and `#load`
+
+```csharp
+#r "C:/libs/DemoLib.dll"
+#load "C:/helpers/format.cs"
+
+var greeting = DemoLib.MathHelper.Greet("World");
+Console.Write(Fmt.Box(greeting));
+```
+
+Directives must appear at the top of the script before any code. `#r "nuget: ..."` is not supported. Loaded files must wrap code in classes/structs (no bare top-level statements).
 
 ## Inter-Script Calling
 

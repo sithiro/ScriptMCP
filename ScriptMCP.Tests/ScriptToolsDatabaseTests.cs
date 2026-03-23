@@ -665,4 +665,270 @@ Console.Write(args.Length + "|" + args[0]);
         if (Directory.Exists(_fixture.OutputDirectory))
             Directory.Delete(_fixture.OutputDirectory, recursive: true);
     }
+
+    // ── #r and #load directive tests ─────────────────────────────────────────
+
+    private string BuildTestHelperDll()
+    {
+        var dllDir = Path.Combine(_fixture.TestDataDirectory, "dlls");
+        Directory.CreateDirectory(dllDir);
+        var dllPath = Path.Combine(dllDir, "DirectiveTestHelper.dll");
+
+        if (File.Exists(dllPath)) return dllPath;
+
+        var source = """
+            namespace DirectiveTestHelper;
+            public static class Greeter
+            {
+                public static string Hello(string name) => $"Hello from DLL, {name}!";
+            }
+            """;
+
+        var syntaxTree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(source);
+        var refs = new List<Microsoft.CodeAnalysis.MetadataReference>();
+        var runtimeDir = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+        refs.Add(Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(Path.Combine(runtimeDir, "System.Runtime.dll")));
+        refs.Add(Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(Path.Combine(runtimeDir, "System.Private.CoreLib.dll")));
+
+        var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
+            "DirectiveTestHelper",
+            new[] { syntaxTree },
+            refs,
+            new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
+
+        using var ms = new MemoryStream();
+        var emitResult = compilation.Emit(ms);
+        Assert.True(emitResult.Success, string.Join("\n", emitResult.Diagnostics));
+        File.WriteAllBytes(dllPath, ms.ToArray());
+        return dllPath;
+    }
+
+    [Fact]
+    public void RDirective_ReferencesExternalDll()
+    {
+        var dllPath = BuildTestHelperDll();
+        var name = UniqueName("test_r_directive");
+
+        var body = $"""
+            #r "{dllPath.Replace("\\", "\\\\")}"
+
+            Console.Write(DirectiveTestHelper.Greeter.Hello("World"));
+            """;
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests #r directive",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("created successfully", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(name);
+        Assert.Equal("Hello from DLL, World!", callResult);
+    }
+
+    [Fact]
+    public void LoadDirective_IncludesFileSource()
+    {
+        var helperPath = Path.Combine(_fixture.TestDataDirectory, "load_helper.cs");
+        File.WriteAllText(helperPath, "public static class LoadHelper { public static string LoadedGreeting() => \"Hello from #load!\"; }");
+
+        var name = UniqueName("test_load_directive");
+
+        var body = $"""
+            #load "{helperPath.Replace("\\", "\\\\")}"
+
+            Console.Write(LoadHelper.LoadedGreeting());
+            """;
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests #load directive",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("created successfully", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(name);
+        Assert.Equal("Hello from #load!", callResult);
+    }
+
+    [Fact]
+    public void LoadDirective_DetectsCircularReference()
+    {
+        var fileA = Path.Combine(_fixture.TestDataDirectory, "circular_a.cs");
+        var fileB = Path.Combine(_fixture.TestDataDirectory, "circular_b.cs");
+        File.WriteAllText(fileA, $"#load \"{fileB.Replace("\\", "\\\\")}\"\n");
+        File.WriteAllText(fileB, $"#load \"{fileA.Replace("\\", "\\\\")}\"\n");
+
+        var name = UniqueName("test_circular");
+
+        var body = $"""
+            #load "{fileA.Replace("\\", "\\\\")}"
+
+            Console.Write("should not get here");
+            """;
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests circular #load detection",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("circular reference detected", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LoadDirective_ErrorsOnMissingFile()
+    {
+        var name = UniqueName("test_load_missing");
+
+        var body = """
+            #load "nonexistent_file_12345.cs"
+
+            Console.Write("should not get here");
+            """;
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests #load missing file",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("file not found", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RDirective_RejectsNuGetReference()
+    {
+        var name = UniqueName("test_nuget_reject");
+
+        var body = """
+            #r "nuget: Newtonsoft.Json, 13.0.3"
+
+            Console.Write("should not get here");
+            """;
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests nuget rejection",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("nuget", result, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not supported", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RDirective_ErrorsOnMissingDll()
+    {
+        var name = UniqueName("test_r_missing");
+
+        var body = """
+            #r "nonexistent_library_12345.dll"
+
+            Console.Write("should not get here");
+            """;
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests #r missing dll",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("file not found", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RDirective_WorksWithForwardSlashes()
+    {
+        var dllPath = BuildTestHelperDll();
+        var forwardSlashPath = dllPath.Replace("\\", "/");
+        var name = UniqueName("test_r_fwd_slash");
+
+        var body = $"""
+            #r "{forwardSlashPath}"
+
+            Console.Write(DirectiveTestHelper.Greeter.Hello("Forward"));
+            """;
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests #r with forward slashes",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("created successfully", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(name);
+        Assert.Equal("Hello from DLL, Forward!", callResult);
+    }
+
+    [Fact]
+    public void RAndLoadDirectives_WorkTogether()
+    {
+        var dllPath = BuildTestHelperDll();
+        var helperPath = Path.Combine(_fixture.TestDataDirectory, "combo_helper.cs");
+        File.WriteAllText(helperPath, "public static class ComboHelper { public static string Format(string s) => $\"[{s}]\"; }");
+
+        var name = UniqueName("test_r_and_load");
+
+        var body = $"""
+            #r "{dllPath.Replace("\\", "\\\\")}"
+            #load "{helperPath.Replace("\\", "\\\\")}"
+
+            var greeting = DirectiveTestHelper.Greeter.Hello("Combo");
+            Console.Write(ComboHelper.Format(greeting));
+            """;
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests #r and #load together",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("created successfully", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(name);
+        Assert.Equal("[Hello from DLL, Combo!]", callResult);
+    }
+
+    [Fact]
+    public void RAndLoadDirectives_WorkWithCrLfLineEndings()
+    {
+        var dllPath = BuildTestHelperDll();
+        var name = UniqueName("test_r_crlf");
+
+        // Simulate MCP transport which may use \r\n
+        var body = "#r \"" + dllPath.Replace("\\", "\\\\") + "\"\r\n\r\nConsole.Write(DirectiveTestHelper.Greeter.Hello(\"CRLF\"));";
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests #r with CRLF line endings",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("created successfully", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(name);
+        Assert.Equal("Hello from DLL, CRLF!", callResult);
+    }
 }

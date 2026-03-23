@@ -20,6 +20,8 @@ If an argument was provided ($ARGUMENTS), use it as the script name. Otherwise, 
 4. Determine the appropriate script type: `code` for C# compiled scripts, `instructions` for plain-English guidance
 5. Define the parameters as a JSON array
 6. Write the script body (top-level C# source for code type, plain English for instructions type)
-7. Register the script with `create_script`
-8. If compilation fails, fix the errors and re-register
-9. Once registered, call `inspect_script` to confirm and show the result to the user
+7. If the script needs external .NET assemblies, add `#r "path.dll"` directives at the top of the body
+8. If the script needs shared helper code from `.cs` files, add `#load "path.cs"` directives at the top of the body (loaded files must contain classes/structs, not bare top-level statements)
+9. Register the script with `create_script`
+10. If compilation fails, fix the errors and re-register
+11. Once registered, call `inspect_script` to confirm and show the result to the user

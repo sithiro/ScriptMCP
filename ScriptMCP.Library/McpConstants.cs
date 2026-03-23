@@ -80,8 +80,13 @@ public static class McpConstants
         "System.Linq, System.Net, System.Net.Http, System.Text, System.Text.RegularExpressions, System.Threading.Tasks. " +
         "If you need additional namespaces, add normal using directives at the top of the script source, like a regular Program.cs file. " +
         "Available assembly references: all System.*.dll from the .NET 9 runtime directory. " +
-        "NOT available: NuGet packages or assemblies outside the runtime (e.g. System.Management, Newtonsoft.Json). " +
+        "NOT available: NuGet packages (ScriptMCP is self-contained, no .NET SDK dependency). " +
         "Use System.Text.Json for JSON. Use System.Net.Http.HttpClient for HTTP. Use System.Diagnostics.Process for shell commands. " +
+        "DIRECTIVES: Scripts support #r \"path.dll\" to reference external .NET assemblies and #load \"path.cs\" to include C# source files. " +
+        "Directives must appear at the top of the script body before any code. Both absolute and relative paths are supported. " +
+        "#load files become separate compilation units — code must be in classes/structs, not bare top-level statements. " +
+        "Loaded files can contain nested #r and #load directives (max depth 10, circular references detected). " +
+        "#r \"nuget: ...\" is not supported. " +
         "The generated entry point is not async-friendly by default — use .Result or .GetAwaiter().GetResult() for async calls. " +
         "Supported parameter types: string (default), int, long, double, float, bool. " +
         "Parameters are auto-parsed from that JSON payload and exposed as typed parameter names in your code. " +
