@@ -70,7 +70,7 @@ if ($claude) {
     $answer = Read-Host "Register with Claude Code? (y/n)"
     if ($answer -match '^[yY]') {
         Write-Host "Registering with Claude Code..."
-        & claude mcp add -s user -t stdio scriptmcp -- $binaryPath
+        & claude.exe mcp add -s user -t stdio scriptmcp -- $binaryPath
         Write-Host "  Claude Code: registered" -ForegroundColor Green
     }
 } else {
@@ -83,7 +83,7 @@ if ($codex) {
     $answer = Read-Host "Register with Codex? (y/n)"
     if ($answer -match '^[yY]') {
         Write-Host "Registering with Codex..."
-        & codex mcp add scriptmcp -- $binaryPath
+        & codex.cmd mcp add scriptmcp -- $binaryPath
         Write-Host "  Codex: registered" -ForegroundColor Green
     }
 } else {
