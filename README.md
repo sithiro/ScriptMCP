@@ -6,167 +6,65 @@ A script runtime for AI agents via the Model Context Protocol (MCP). ScriptMCP l
 
 ## Overview
 
-ScriptMCP exposes 20 MCP tools that together form a self-extending toolbox:
+ScriptMCP exposes 20 MCP tools that together form a self-extending toolbox. You interact with the agent in natural language — the agent decides which tools to call.
 
-| Tool                        | Description                                                     |
-| --------------------------- | --------------------------------------------------------------- |
-| `create_script`             | Create a new script (C# code or plain English instructions)     |
-| `load_script`               | Load a script from a file, creating or updating it              |
-| `export_script`             | Export a stored script to a local file                          |
-| `update_script`             | Update one field on an existing script entry                    |
-| `call_script`               | Execute a script in-process                                     |
-| `call_process`       | Execute a script out-of-process (subprocess)                    |
-| `list_scripts`              | List registered script names as a comma-delimited string        |
-| `inspect_script`            | View script metadata, with optional full source inspection      |
-| `compile_script`            | Compile a code script and export its assembly to a file         |
-| `delete_script`             | Remove a script                                                 |
-| `get_database`             | Show the currently active ScriptMCP database path               |
-| `set_database`             | Switch to a different ScriptMCP database at runtime             |
-| `delete_database`          | Delete a non-default ScriptMCP database                         |
-| `create_scheduled_task`     | Schedule a script to run at a recurring interval                |
-| `read_scheduled_task`       | Read the latest scheduled-task output for a script              |
-| `delete_scheduled_task`     | Delete a scheduled task for a script                            |
-| `list_scheduled_tasks`      | List ScriptMCP scheduled tasks                                  |
-| `start_scheduled_task`      | Enable and start a scheduled task                               |
-| `stop_scheduled_task`       | Disable a scheduled task                                        |
+```
+AI Agent ──► MCP Protocol ──► ScriptMCP Server ──► .NET 9 ──► Execute ──┐
+   ▲                                │                                   │
+   │                                ▼                                   │
+   │                          Roslyn Compiler                           │
+   │                                │                                   │
+   │                                ▼                                   │
+   │                          SQLite Database                           │
+   │                       (scripts + assemblies)                       │
+   │                                                                    │
+   └──────────────────────── Result ◄───────────────────────────────────┘
+```
 
 ### How It Works
 
-1. **Discover** — the AI agent discovers available scripts via `list_scripts` at the start of each conversation
-2. **Create** — the AI agent writes and creates C# scripts or plain English instructions on your behalf (or you provide explicit code)
-3. **Load / Export** — script source can be synchronized with local files via `load_script` and `export_script`
-4. **Persist** — scripts are **compiled via Roslyn** on creation and stored in SQLite — they survive server restarts
-5. **Execute** — scripts are invoked automatically by the AI via `call_script` (in-process) or `call_process` (out-of-process)
-6. **Switch Databases** — the active SQLite database can be inspected or changed at runtime via `get_database` and `set_database`
-7. **Schedule** — scripts can be scheduled to run at recurring intervals via `create_scheduled_task`
-8. **Update** — existing scripts can be revised in place with `update_script`, and source-affecting updates recompile automatically
-9. **Compile / Export Assembly** — `compile_script` recompiles the stored source and exports the assembly to a `.dll`
-10. **Delete** — scripts or non-default databases can be removed when no longer needed
+1. **You ask** — describe what you need in plain English
+2. **The agent builds** — the AI writes C# code, compiles it via Roslyn, and stores it in SQLite
+3. **It runs** — the agent executes the script and returns the result
+4. **It persists** — scripts survive server restarts and can be reused across sessions
+5. **It grows** — scripts can be updated, composed, scheduled, and shared across databases
 
 ### Script Types
 
-- **`code`** — top-level C# source, like a `Program.cs` file, compiled at runtime. Script output comes from `Console.Write` / `Console.WriteLine`.
-- **`instructions`** — Plain English instructions the AI reads and follows (e.g. multi-step workflows combining multiple tools and web search).
+- **Code** — top-level C# source compiled at runtime on .NET 9 / C# 13. Output via `Console.Write` / `Console.WriteLine`.
+- **Instructions** — plain English steps the AI reads and follows (e.g. multi-step workflows combining tools and web search).
 
-Code scripts support full top-level C# on .NET 9 / C# 13. You can paste normal `Program.cs` style code with `using` directives, top-level statements, local functions, classes, enums, records, and helper types in a single script. Classic `Program.Main(string[] args)` is also supported.
+### Directives
 
-### In-Process Execution
-
-`call_script` runs a script directly inside the MCP server process. This is the default and fastest way to execute a script.
-
-### Out-of-Process Execution
-
-`call_process` spawns `scriptmcp.exe --exec <scriptName> [argsJson]` as a subprocess. This enables parallelization.
-
-### Scheduled Tasks
-
-`create_scheduled_task` sets up a recurring job that runs a script at a fixed interval. On Windows it uses Task Scheduler; on Linux/macOS it uses cron.
-
-### Database Selection
-
-ScriptMCP stores scripts in a SQLite database and can switch databases during a live session:
-
-- `get_database` returns the currently active database path
-- `set_database` switches to another database path or database name
-- `delete_database` first validates the target database and returns a yes-or-no confirmation prompt before deleting a non-default database
-
-If `set_database` receives only a file name such as `work.db`, it resolves that name inside the default ScriptMCP data directory for the current OS. If the target database does not exist yet, the caller must confirm creation by passing `create=true`.
-
-### Output Instructions
-
-Scripts can include optional **output instructions** that tell the AI how to format results. The AI reads the instructions and formats the output accordingly — e.g. render as a markdown table, display in an ASCII box, summarize in bullet points.
+Code scripts support `#r "path.dll"` to reference external .NET assemblies and `#load "path.cs"` to include shared C# source files. Directives appear at the top of the script before any code.
 
 ## Examples
 
-### HelloWorld.cs
+### Create a script with natural language
 
-```csharp
-using System;
-
-Console.WriteLine("Hello, world!");
-```
+Just describe what you need — the AI writes the code, compiles it, and runs it:
 
 ```
-You:    load HelloWorld.cs
-Agent:  [calls load_script → path="HelloWorld.cs"]
-        Script 'HelloWorld' loaded from 'HelloWorld.cs' and created.
-
-You:    say hello
-Agent:  Hello, world!
-```
-
-### Fibonacci.cs
-
-Fibonacci from the JSON payload in `args[0]`:
-
-```csharp
-using System;
-using System.Text.Json;
-
-var doc = JsonDocument.Parse(args[0]);
-var n = doc.RootElement.TryGetProperty("n", out var value) ? value.GetInt32() : 10;
-
-static long Fibonacci(int value)
-{
-    if (value <= 1)
-        return value;
-
-    long a = 0;
-    long b = 1;
-
-    for (var i = 2; i <= value; i++)
-    {
-        var next = a + b;
-        a = b;
-        b = next;
-    }
-
-    return b;
-}
-
-Console.WriteLine(Fibonacci(n));
-```
-
-```
-You:    load Fibonacci.cs
-Agent:  [calls load_script → path="Fibonacci.cs"]
-        Script 'Fibonacci' loaded from 'Fibonacci.cs' and created.
-
-You:    calculate fibonacci for 12
-Agent:  144
-```
-
-### Let the AI create a script for you
-
-Just describe what you need in natural language — the AI writes the C# code, creates the script, and calls it:
-
-```
-You:    create a script that returns the current time, nothing else
-Agent:  [creates get_time → Console.Write(DateTime.Now.ToString("hh:mm:ss tt"));]
+You:    create a script that returns the current time
+Agent:  Script 'get_time' created successfully.
 
 You:    what time is it?
 Agent:  10:07:39 pm
 ```
 
-### Load a script from a file
-
-`load_script` is the main file-based workflow. It creates the script if it does not exist yet, or updates the stored script from the file if it already exists.
+### Parameterized scripts
 
 ```
-You:    load the script from C:\work\weather.cs
-Agent:  [calls load_script → path="C:\work\weather.cs"]
-        Script 'weather' loaded from 'C:\work\weather.cs' and created.
+You:    create a script called fibonacci that takes a number n and returns the nth fibonacci number
+Agent:  Script 'fibonacci' created successfully with 1 parameter(s).
 
-You:    i changed the file, load it again
-Agent:  [calls load_script → path="C:\work\weather.cs"]
-        Script 'weather' loaded from 'C:\work\weather.cs' and updated.
+You:    calculate fibonacci for 12
+Agent:  144
 ```
 
-This is useful when you want to author a script in VS Code, keep the source on disk, and sync it back into ScriptMCP for compilation and execution.
+### Instructions scripts
 
-### Instructions-type scripts
-
-Not everything needs code. You can create a script with plain English step-by-step instructions that become part of the script. When the script is called, the AI reads and follows those instructions:
+Not everything needs code. Create a script with plain English instructions:
 
 ```
 You:    create a script called find_stock_symbol with these instructions:
@@ -174,70 +72,87 @@ You:    create a script called find_stock_symbol with these instructions:
         2) Return the ticker symbol, company name, and exchange
 
 You:    find the stock ticker for "that electric car company elon runs"
-Agent:  [calls find_stock_symbol → reads stored instructions → searches Yahoo Finance]
-        TSLA — Tesla, Inc. (NASDAQ)
+Agent:  TSLA — Tesla, Inc. (NASDAQ)
 ```
 
 ### Script chaining
 
-Code scripts can call other scripts and hand off to the AI via `[Output Instructions]`:
+Scripts can call other scripts and hand off to the AI via output instructions:
 
 ```
 You:    create get_btc_price_eur — gets BTC price then tells the AI to convert it
-Agent:  [creates get_btc_price_eur as a code script]:
-
-        var price = ScriptMCP.Call("get_btc_price", "{}").Trim();
-        Console.Write(price + "\n[Output Instructions]: This is the current BTC price in USD. "
-            + "Now call the usd_to_eur script with this amount to convert it, "
-            + "then return the EUR result to the user.");
 
 You:    what's bitcoin worth in euros?
-Agent:  [calls get_btc_price_eur → gets $68,721.00]
-        [follows output instructions → calls usd_to_eur with $68,721.00]
-        €59,473.22
+Agent:  €59,473.22
 ```
 
-The code script handles what code does best (calling APIs, fetching data), then the output instructions hand off to the AI for the next step — including calling another script. This creates a tail-call chain where each script can delegate onward to the AI or to other scripts.
+Behind the scenes, the script calls `get_btc_price`, then the output instructions tell the AI to convert the result via `usd_to_eur` — creating a tail-call chain where each script can delegate onward.
 
-### Scheduled tasks
+### Scheduling
 
 ```
-You:    schedule get_stock_price to run every 5 minutes with {"symbol":"AAPL"}
-Agent:  [calls create_scheduled_task → interval_minutes=5]
-        Scheduled task created and started.
+You:    schedule get_stock_price to run every 5 minutes with symbol AAPL
+Agent:  Scheduled task created and started.
 
 You:    what was the last stock price result?
-Agent:  [calls read_scheduled_task → function_name="get_stock_price"]
-        AAPL: $266.86 (+3.37, +1.28%)
+Agent:  AAPL: $266.86 (+3.37, +1.28%)
 
-You:    change it to run every 10 minutes instead
-Agent:  [calls delete_scheduled_task → interval_minutes=5]
-        [calls create_scheduled_task → interval_minutes=10]
-        Rescheduled to every 10 minutes.
+You:    change it to every 10 minutes
+Agent:  Rescheduled to every 10 minutes.
 
 You:    delete the stock price task
-Agent:  [calls delete_scheduled_task → function_name="get_stock_price"]
-        Scheduled task deleted.
+Agent:  Scheduled task deleted.
 ```
 
-### Switching databases at runtime
+### Switching databases
 
 ```
-You:    which ScriptMCP database is active?
-Agent:  [calls get_database]
-        C:\Users\you\AppData\Local\ScriptMCP\scriptmcp.db
+You:    which database is active?
+Agent:  C:\Users\you\AppData\Local\ScriptMCP\scriptmcp.db
 
-You:    switch to sandbox.db
-Agent:  [calls set_database → path="sandbox.db"]
-        Database does not exist...
+You:    switch to sandbox
+Agent:  Database does not exist. Create it?
 
-You:    yes, create it
-Agent:  [calls set_database → path="sandbox.db", create=true]
-        Switched database from:
-          C:\Users\you\AppData\Local\ScriptMCP\scriptmcp.db
-        to:
-          C:\Users\you\AppData\Local\ScriptMCP\sandbox.db
+You:    yes
+Agent:  Switched to sandbox.db
 ```
+
+### Loading a script from a file
+
+If you prefer to author scripts in your editor, you can load them from disk:
+
+```
+You:    load the script from C:\work\weather.cs
+Agent:  Script 'weather' loaded and created.
+
+You:    I changed the file, reload it
+Agent:  Script 'weather' updated from file.
+```
+
+### Referencing external libraries
+
+```
+You:    create a script that uses my MathLib.dll to calculate circle areas
+
+Agent:  (creates a script with #r "C:/libs/MathLib.dll" at the top)
+
+You:    what's the area of a circle with radius 5?
+Agent:  78.54
+```
+
+## MCP Tools
+
+ScriptMCP provides 20 tools across four categories. You don't call these directly — the agent uses them based on your natural language requests.
+
+| Category | Tools | What you say |
+|----------|-------|-------------|
+| **Script lifecycle** | create, list, inspect, update, delete | "create a script that...", "show me my scripts", "delete fibonacci" |
+| **Execution** | call_script, call_process | "run get_time", "what's the weather?" |
+| **File sync** | load, export, compile | "load script from file", "export to disk", "compile to DLL" |
+| **Database** | get, set, delete database | "which database?", "switch to work.db" |
+| **Scheduling** | create, list, read, start, stop, delete task | "schedule X every 5 minutes", "show last result" |
+
+For the full tool reference, see the [wiki](https://github.com/sithiro/ScriptMCP/wiki/MCP-Tools-Reference).
 
 ## Repository Structure
 
@@ -248,8 +163,6 @@ Agent:  [calls set_database → path="sandbox.db", create=true]
 | `ScriptMCP.Extension` | Packaging for Claude Desktop — contains `manifest.json` and a `server/` folder for the binary |
 | `ScriptMCP.Plugin` | Claude Code plugin — slash commands, hooks, skills, and MCP server configuration |
 | `ScriptMCP.Tests` | Unit and integration tests |
-
-`ScriptMCP.Console` and `ScriptMCP.Library` are the MCP server itself. `ScriptMCP.Extension` is a distribution wrapper for Claude Desktop. `ScriptMCP.Plugin` targets Claude Desktop but can also be used with the Claude Code CLI via the `--plugin-dir` argument.
 
 ## Install
 
@@ -265,7 +178,7 @@ Download the `.mcpb` file for your platform from the [latest release](https://gi
 | Linux x64 | `scriptmcp-linux-x64.mcpb` |
 | macOS arm64 (Apple Silicon) | `scriptmcp-osx-arm64.mcpb` |
 
-Open the `.mcpb` file in Claude Desktop to install the ScriptMCP extension. This provides the MCP server and all 17 tools.
+Open the `.mcpb` file in Claude Desktop to install the ScriptMCP extension. This provides the MCP server and all 20 tools.
 
 ![ScriptMCP Extension Install](snapshot5.png)
 
@@ -324,50 +237,34 @@ To remove it:
 codex mcp remove scriptmcp
 ```
 
-### Arguments
+### CLI Usage
 
-`scriptmcp` supports these runtime arguments:
-
-- `--db [FILEPATH|FILENAME]`: use a specific SQLite database path instead of the default ScriptMCP data directory
-- `--exec <scriptName> [argsJson]`: execute one script and write the result to stdout
-- `--exec-out <scriptName> [argsJson]`: execute one script, write the result to stdout, and persist the cleaned output to a new timestamped file
-- `--exec-out-append <scriptName> [argsJson]`: execute one script, write the result to stdout, and append the cleaned output to a stable `<script>.txt` file
-
-Examples:
+ScriptMCP can also be used directly from the command line:
 
 ```bash
 scriptmcp --exec get_time
-
 scriptmcp --exec get_stock_price '{"symbol":"AAPL"}'
+scriptmcp --db work.db --exec get_time
 ```
 
-Use `--db` to select a custom database path for either MCP mode or CLI execution mode:
-
-```bash
-# absolute path
-scriptmcp --db "D:\Data\scriptmcp.db" --exec get_time
-
-# relative path (resolved under the default ScriptMCP data directory)
-scriptmcp --db test.db --exec get_time
-```
-
-`--db` applies in both MCP server mode and CLI execution modes (`--exec`, `--exec-out`, `--exec-out-append`). If you pass a relative path (for example, `--db test.db`), it is resolved under the default ScriptMCP data directory for your OS.
-
-At runtime, agents can inspect or change the active database without restarting the server by calling `get_database` and `set_database`. Deletion of a non-default database is handled through `delete_database`, which first validates the target and returns a yes-or-no confirmation prompt.
-
+| Argument | Description |
+|----------|-------------|
+| `--db <path>` | Use a specific database (relative names resolve under the default data directory) |
+| `--exec <name> [args]` | Execute a script and write result to stdout |
+| `--exec-out <name> [args]` | Execute and save output to a timestamped file |
+| `--exec-out-append <name> [args]` | Execute and append output to a stable file |
 
 ### Data Directory
 
-Scripts are persisted in a SQLite database created on first run. Execution output from `--exec-out` is stored in the `output/` folder alongside it:
+Scripts are persisted in a SQLite database created on first run:
 
 - Windows: `%LOCALAPPDATA%\ScriptMCP\`
 - macOS: `~/Library/Application Support/ScriptMCP/`
 - Linux: `~/.local/share/ScriptMCP/`
 
-| File           | Purpose                                                                                               |
-| -------------- | ----------------------------------------------------------------------------------------------------- |
-| `scriptmcp.db` | SQLite database of registered scripts                                                               |
-| `output/`      | Timestamped files or append-mode `<script>.txt` files written by `--exec-out` / `--exec-out-append` |
+## Documentation
+
+For tutorials, recipes, and full tool reference, see the [ScriptMCP Wiki](https://github.com/sithiro/ScriptMCP/wiki).
 
 ## Agent Instructions (CLAUDE.md / AGENTS.md)
 
@@ -379,8 +276,6 @@ If ScriptMCP is not behaving as expected, you can reinforce the instructions by 
 | ------------ | ----------- | ------------------------------------------ |
 | Claude Code  | `CLAUDE.md` | `~/.claude/CLAUDE.md`                      |
 | OpenAI Codex | `AGENTS.md` | `~/AGENTS.md` (or common parent directory) |
-
-If you only use one agent, you only need the corresponding file. Both files contain the same instructions.
 
 ## Scripting Environment
 
