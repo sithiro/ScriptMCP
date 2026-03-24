@@ -16,7 +16,7 @@ powershell -c "irm https://sithiro.github.io/ScriptMCP/install.ps1 | iex"
 curl -fsSL https://sithiro.github.io/ScriptMCP/install.sh | bash
 ```
 
-Run from the directory where you want ScriptMCP installed. The script downloads the latest release, extracts the MCP server, and creates a `.mcp.json` so Claude Code and Codex discover it automatically.
+Run from the directory where you want ScriptMCP installed. The script downloads the latest release, extracts the MCP server, and registers it with Claude Code and/or Codex.
 
 ## Overview
 
