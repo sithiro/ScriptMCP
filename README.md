@@ -45,11 +45,17 @@ Code scripts support `#r "path.dll"` to reference external .NET assemblies and `
 Just describe what you need — the AI writes the code, compiles it, and runs it:
 
 ```
-You:    create a script that returns the current time
+You:    create a script that returns exactly the current time
 Agent:  Script 'get_time' created successfully.
 
 You:    what time is it?
 Agent:  10:07:39 pm
+```
+
+Behind the scenes, the agent wrote and compiled this C# script:
+
+```csharp
+Console.Write(DateTime.Now.ToString("h:mm:ss tt").ToLower());
 ```
 
 ### Parameterized scripts
@@ -77,16 +83,20 @@ Agent:  TSLA — Tesla, Inc. (NASDAQ)
 
 ### Script chaining
 
-Scripts can call other scripts and hand off to the AI via output instructions:
+Scripts build on each other. The agent chains them automatically when your request spans multiple scripts:
 
 ```
-You:    create get_btc_price_eur — gets BTC price then tells the AI to convert it
+You:    create a script that gets the current price of bitcoin in USD
+Agent:  Script 'get_btc_price' created successfully.
+
+You:    create a script that converts a USD amount to EUR
+Agent:  Script 'usd_to_eur' created successfully with 1 parameter(s).
 
 You:    what's bitcoin worth in euros?
 Agent:  €59,473.22
 ```
 
-Behind the scenes, the script calls `get_btc_price`, then the output instructions tell the AI to convert the result via `usd_to_eur` — creating a tail-call chain where each script can delegate onward.
+The agent calls `get_btc_price` first, feeds the result into `usd_to_eur`, and returns the final converted price.
 
 ### Scheduling
 
@@ -144,7 +154,7 @@ Agent:  78.54
 
 ScriptMCP provides 20 tools across four categories. You don't call these directly — the agent uses them based on your natural language requests.
 
-| Category | Tools | What you say |
+| Category | Tools | What you say (examples) |
 |----------|-------|-------------|
 | **Script lifecycle** | create, list, inspect, update, delete | "create a script that...", "show me my scripts", "delete fibonacci" |
 | **Execution** | call_script, call_process | "run get_time", "what's the weather?" |
