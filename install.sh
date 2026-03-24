@@ -37,7 +37,7 @@ case "$OS" in
 esac
 
 ASSET="scriptmcp-${RID}.mcpb"
-URL="https://github.com/sithiro/ScriptMCP/releases/download/v${VERSION}/${ASSET}"
+URL="https://github.com/sithiro/ScriptMCP/releases/download/scriptmcp-v${VERSION}/${ASSET}"
 INSTALL_DIR="ScriptMCP v${VERSION}"
 
 echo "Downloading ScriptMCP v${VERSION} for ${RID}..."

@@ -22,7 +22,7 @@ if (-not $Version) {
 $rid = "win-x64"
 $binary = "scriptmcp.exe"
 $asset = "scriptmcp-$rid.mcpb"
-$url = "https://github.com/sithiro/ScriptMCP/releases/download/v$Version/$asset"
+$url = "https://github.com/sithiro/ScriptMCP/releases/download/scriptmcp-v$Version/$asset"
 $installDir = "ScriptMCP v$Version"
 
 Write-Host "Downloading ScriptMCP v$Version for $rid..."
