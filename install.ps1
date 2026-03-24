@@ -1,9 +1,8 @@
 # ScriptMCP Installer (Windows PowerShell)
-# Downloads the latest ScriptMCP MCP server and creates a .mcp.json
-# so Claude Code / Codex discovers it automatically.
+# Downloads the latest ScriptMCP MCP server and registers it with Claude Code and/or Codex.
 #
 # Usage:
-#   powershell -c "irm https://raw.githubusercontent.com/sithiro/ScriptMCP/main/install.ps1 | iex"
+#   powershell -c "irm https://sithiro.github.io/ScriptMCP/install.ps1 | iex"
 
 $rid = "win-x64"
 $binary = "scriptmcp.exe"
@@ -59,23 +58,37 @@ try {
 
 Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
 
-# Create .mcp.json
-$mcpJson = @"
-{
-  "mcpServers": {
-    "scriptmcp": {
-      "command": "$installDir/$binary",
-      "args": []
+$binaryPath = (Resolve-Path (Join-Path $installDir $binary)).Path
+
+Write-Host ""
+Write-Host "ScriptMCP v$version downloaded to '$installDir'" -ForegroundColor Green
+Write-Host ""
+
+# Register with Claude Code
+$claude = Get-Command claude -ErrorAction SilentlyContinue
+if ($claude) {
+    $answer = Read-Host "Register with Claude Code? (y/n)"
+    if ($answer -match '^[yY]') {
+        Write-Host "Registering with Claude Code..."
+        & claude mcp add -s user -t stdio scriptmcp -- $binaryPath
+        Write-Host "  Claude Code: registered" -ForegroundColor Green
     }
-  }
+} else {
+    Write-Host "  Claude Code: not found (skipped)"
 }
-"@
 
-[System.IO.File]::WriteAllText((Join-Path $PWD ".mcp.json"), $mcpJson)
+# Register with Codex
+$codex = Get-Command codex -ErrorAction SilentlyContinue
+if ($codex) {
+    $answer = Read-Host "Register with Codex? (y/n)"
+    if ($answer -match '^[yY]') {
+        Write-Host "Registering with Codex..."
+        & codex mcp add scriptmcp -- $binaryPath
+        Write-Host "  Codex: registered" -ForegroundColor Green
+    }
+} else {
+    Write-Host "  Codex: not found (skipped)"
+}
 
 Write-Host ""
-Write-Host "ScriptMCP v$version installed successfully!" -ForegroundColor Green
-Write-Host "  Binary:   $installDir\$binary"
-Write-Host "  Config:   .mcp.json"
-Write-Host ""
-Write-Host "Run 'claude' or 'codex' from this directory to start using ScriptMCP."
+Write-Host "Done! Start 'claude' or 'codex' to use ScriptMCP."

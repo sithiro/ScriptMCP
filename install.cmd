@@ -2,8 +2,7 @@
 setlocal enabledelayedexpansion
 
 :: ScriptMCP Installer (Windows cmd)
-:: Downloads the latest ScriptMCP MCP server and creates a .mcp.json
-:: so Claude Code / Codex discovers it automatically.
+:: Downloads the latest ScriptMCP MCP server and registers it with Claude Code and/or Codex.
 ::
 :: Usage:
 ::   install.cmd
@@ -45,21 +44,40 @@ move "!INSTALL_DIR!\server\%BINARY%" "!INSTALL_DIR!\" >nul
 rmdir /s /q "!INSTALL_DIR!\server" 2>nul
 del "%TEMP%\scriptmcp.zip" 2>nul
 
-echo Creating .mcp.json...
-(
-echo {
-echo   "mcpServers": {
-echo     "scriptmcp": {
-echo       "command": "!INSTALL_DIR!/%BINARY%",
-echo       "args": []
-echo     }
-echo   }
-echo }
-) > .mcp.json
+:: Get absolute path to binary
+pushd "!INSTALL_DIR!"
+set "BINARY_PATH=!CD!\%BINARY%"
+popd
 
 echo.
-echo ScriptMCP v!VERSION! installed successfully!
-echo   Binary:   !INSTALL_DIR!\%BINARY%
-echo   Config:   .mcp.json
+echo ScriptMCP v!VERSION! downloaded to '!INSTALL_DIR!'
 echo.
-echo Run 'claude' or 'codex' from this directory to start using ScriptMCP.
+
+:: Register with Claude Code
+where claude >nul 2>nul
+if !errorlevel! equ 0 (
+    set /p "CLAUDE_ANSWER=Register with Claude Code? (y/n) "
+    if /i "!CLAUDE_ANSWER!"=="y" (
+        echo Registering with Claude Code...
+        claude mcp add -s user -t stdio scriptmcp -- "!BINARY_PATH!"
+        echo   Claude Code: registered
+    )
+) else (
+    echo   Claude Code: not found (skipped^)
+)
+
+:: Register with Codex
+where codex >nul 2>nul
+if !errorlevel! equ 0 (
+    set /p "CODEX_ANSWER=Register with Codex? (y/n) "
+    if /i "!CODEX_ANSWER!"=="y" (
+        echo Registering with Codex...
+        codex mcp add scriptmcp -- "!BINARY_PATH!"
+        echo   Codex: registered
+    )
+) else (
+    echo   Codex: not found (skipped^)
+)
+
+echo.
+echo Done! Start 'claude' or 'codex' to use ScriptMCP.

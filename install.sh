@@ -2,11 +2,10 @@
 set -euo pipefail
 
 # ScriptMCP Installer (Linux/macOS)
-# Downloads the latest ScriptMCP MCP server and creates a .mcp.json
-# so Claude Code / Codex discovers it automatically.
+# Downloads the latest ScriptMCP MCP server and registers it with Claude Code and/or Codex.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/sithiro/ScriptMCP/main/install.sh | bash
+#   curl -fsSL https://sithiro.github.io/ScriptMCP/install.sh | bash
 
 REPO="sithiro/ScriptMCP"
 
@@ -70,27 +69,35 @@ if [ "$RID" != "win-x64" ]; then
   chmod +x "$INSTALL_DIR/$BINARY"
 fi
 
-# Determine the command path for .mcp.json
-case "$RID" in
-  win-x64) CMD_PATH="${INSTALL_DIR}/${BINARY}" ;;
-  *)        CMD_PATH="./${INSTALL_DIR}/${BINARY}" ;;
-esac
-
-# Create .mcp.json
-cat > .mcp.json <<MCPJSON
-{
-  "mcpServers": {
-    "scriptmcp": {
-      "command": "${CMD_PATH}",
-      "args": []
-    }
-  }
-}
-MCPJSON
+BINARY_PATH="$(cd "$INSTALL_DIR" && pwd)/$BINARY"
 
 echo ""
-echo "ScriptMCP v${VERSION} installed successfully!"
-echo "  Binary:   ${INSTALL_DIR}/${BINARY}"
-echo "  Config:   .mcp.json"
+echo "ScriptMCP v${VERSION} downloaded to '${INSTALL_DIR}'"
 echo ""
-echo "Run 'claude' or 'codex' from this directory to start using ScriptMCP."
+
+# Register with Claude Code
+if command -v claude &>/dev/null; then
+  read -r -p "Register with Claude Code? (y/n) " answer
+  if [[ "$answer" =~ ^[yY] ]]; then
+    echo "Registering with Claude Code..."
+    claude mcp add -s user -t stdio scriptmcp -- "$BINARY_PATH"
+    echo "  Claude Code: registered"
+  fi
+else
+  echo "  Claude Code: not found (skipped)"
+fi
+
+# Register with Codex
+if command -v codex &>/dev/null; then
+  read -r -p "Register with Codex? (y/n) " answer
+  if [[ "$answer" =~ ^[yY] ]]; then
+    echo "Registering with Codex..."
+    codex mcp add scriptmcp -- "$BINARY_PATH"
+    echo "  Codex: registered"
+  fi
+else
+  echo "  Codex: not found (skipped)"
+fi
+
+echo ""
+echo "Done! Start 'claude' or 'codex' to use ScriptMCP."
