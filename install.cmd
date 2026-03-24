@@ -53,6 +53,8 @@ echo.
 echo ScriptMCP v!VERSION! downloaded to '!INSTALL_DIR!'
 echo.
 
+set "REGISTERED=0"
+
 :: Register with Claude Code
 where claude >nul 2>nul
 if !errorlevel! equ 0 (
@@ -61,9 +63,8 @@ if !errorlevel! equ 0 (
         echo Registering with Claude Code...
         claude mcp add -s user -t stdio scriptmcp -- "!BINARY_PATH!"
         echo   Claude Code: registered
+        set "REGISTERED=1"
     )
-) else (
-    echo   Claude Code: not found (skipped^)
 )
 
 :: Register with Codex
@@ -74,10 +75,25 @@ if !errorlevel! equ 0 (
         echo Registering with Codex...
         codex mcp add scriptmcp -- "!BINARY_PATH!"
         echo   Codex: registered
+        set "REGISTERED=1"
     )
-) else (
-    echo   Codex: not found (skipped^)
+)
+
+:: Fallback: create .mcp.json if nothing was registered
+if "!REGISTERED!"=="0" (
+    echo No CLI detected or selected. Creating .mcp.json in current directory...
+    (
+echo {
+echo   "mcpServers": {
+echo     "scriptmcp": {
+echo       "command": "!BINARY_PATH!",
+echo       "args": []
+echo     }
+echo   }
+echo }
+    ) > .mcp.json
+    echo   Created .mcp.json
 )
 
 echo.
-echo Done! Start 'claude' or 'codex' to use ScriptMCP.
+echo Done!

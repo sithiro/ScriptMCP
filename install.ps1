@@ -64,6 +64,8 @@ Write-Host ""
 Write-Host "ScriptMCP v$version downloaded to '$installDir'" -ForegroundColor Green
 Write-Host ""
 
+$registered = $false
+
 # Register with Claude Code
 $claude = Get-Command claude -ErrorAction SilentlyContinue
 if ($claude) {
@@ -72,9 +74,8 @@ if ($claude) {
         Write-Host "Registering with Claude Code..."
         & claude.exe mcp add -s user -t stdio scriptmcp -- $binaryPath
         Write-Host "  Claude Code: registered" -ForegroundColor Green
+        $registered = $true
     }
-} else {
-    Write-Host "  Claude Code: not found (skipped)"
 }
 
 # Register with Codex
@@ -85,10 +86,26 @@ if ($codex) {
         Write-Host "Registering with Codex..."
         & codex.cmd mcp add scriptmcp -- $binaryPath
         Write-Host "  Codex: registered" -ForegroundColor Green
+        $registered = $true
     }
-} else {
-    Write-Host "  Codex: not found (skipped)"
+}
+
+# Fallback: create .mcp.json if nothing was registered
+if (-not $registered) {
+    Write-Host "No CLI detected or selected. Creating .mcp.json in current directory..."
+    $mcpJson = @"
+{
+  "mcpServers": {
+    "scriptmcp": {
+      "command": "$binaryPath",
+      "args": []
+    }
+  }
+}
+"@
+    [System.IO.File]::WriteAllText((Join-Path $PWD ".mcp.json"), $mcpJson)
+    Write-Host "  Created .mcp.json" -ForegroundColor Green
 }
 
 Write-Host ""
-Write-Host "Done! Start 'claude' or 'codex' to use ScriptMCP."
+Write-Host "Done!" -ForegroundColor Green

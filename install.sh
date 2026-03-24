@@ -75,6 +75,8 @@ echo ""
 echo "ScriptMCP v${VERSION} downloaded to '${INSTALL_DIR}'"
 echo ""
 
+REGISTERED=false
+
 # Register with Claude Code
 if command -v claude &>/dev/null; then
   read -r -p "Register with Claude Code? (y/n) " answer
@@ -82,9 +84,8 @@ if command -v claude &>/dev/null; then
     echo "Registering with Claude Code..."
     claude mcp add -s user -t stdio scriptmcp -- "$BINARY_PATH"
     echo "  Claude Code: registered"
+    REGISTERED=true
   fi
-else
-  echo "  Claude Code: not found (skipped)"
 fi
 
 # Register with Codex
@@ -94,10 +95,25 @@ if command -v codex &>/dev/null; then
     echo "Registering with Codex..."
     codex mcp add scriptmcp -- "$BINARY_PATH"
     echo "  Codex: registered"
+    REGISTERED=true
   fi
-else
-  echo "  Codex: not found (skipped)"
+fi
+
+# Fallback: create .mcp.json if nothing was registered
+if [ "$REGISTERED" = false ]; then
+  echo "No CLI detected or selected. Creating .mcp.json in current directory..."
+  cat > .mcp.json <<MCPJSON
+{
+  "mcpServers": {
+    "scriptmcp": {
+      "command": "${BINARY_PATH}",
+      "args": []
+    }
+  }
+}
+MCPJSON
+  echo "  Created .mcp.json"
 fi
 
 echo ""
-echo "Done! Start 'claude' or 'codex' to use ScriptMCP."
+echo "Done!"
