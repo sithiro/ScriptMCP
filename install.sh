@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ScriptMCP Installer
-# Downloads a specific version of the ScriptMCP MCP server and creates a .mcp.json
-# pointing to it so Claude Code / Codex can discover it automatically.
+# ScriptMCP Installer (Linux/macOS)
+# Downloads the latest ScriptMCP MCP server and creates a .mcp.json
+# so Claude Code / Codex discovers it automatically.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/sithiro/ScriptMCP/main/install.sh | bash -s -- <version>
-#   ./install.sh 1.0.0
+#   curl -fsSL https://raw.githubusercontent.com/sithiro/ScriptMCP/main/install.sh | bash
 
-VERSION="${1:-}"
-if [ -z "$VERSION" ]; then
-  echo "Usage: install.sh <version>"
-  echo "  e.g. install.sh 1.0.0"
-  exit 1
-fi
+REPO="sithiro/ScriptMCP"
 
 # Detect platform
 OS="$(uname -s)"
@@ -36,8 +30,18 @@ case "$OS" in
     ;;
 esac
 
+# Get the latest release tag
+echo "Checking latest version..."
+TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep -o '"tag_name":\s*"[^"]*"' | head -1 | cut -d'"' -f4)
+if [ -z "$TAG" ]; then
+  echo "Failed to fetch latest release from GitHub."
+  exit 1
+fi
+
+# Extract version from tag (scriptmcp-v1.3.0 -> 1.3.0)
+VERSION="${TAG#scriptmcp-v}"
 ASSET="scriptmcp-${RID}.mcpb"
-URL="https://github.com/sithiro/ScriptMCP/releases/download/scriptmcp-v${VERSION}/${ASSET}"
+URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET}"
 INSTALL_DIR="ScriptMCP v${VERSION}"
 
 echo "Downloading ScriptMCP v${VERSION} for ${RID}..."

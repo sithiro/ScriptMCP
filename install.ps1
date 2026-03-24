@@ -1,31 +1,32 @@
 # ScriptMCP Installer (Windows PowerShell)
-# Downloads a specific version of the ScriptMCP MCP server and creates a .mcp.json
-# pointing to it so Claude Code / Codex can discover it automatically.
+# Downloads the latest ScriptMCP MCP server and creates a .mcp.json
+# so Claude Code / Codex discovers it automatically.
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/sithiro/ScriptMCP/main/install.ps1 | iex   (prompts for version)
-#   .\install.ps1 -Version 1.0.0
-
-param(
-    [Parameter(Position = 0)]
-    [string]$Version
-)
-
-if (-not $Version) {
-    $Version = Read-Host "Enter ScriptMCP version to install (e.g. 1.0.0)"
-    if (-not $Version) {
-        Write-Error "Version is required."
-        exit 1
-    }
-}
+#   powershell -c "irm https://raw.githubusercontent.com/sithiro/ScriptMCP/main/install.ps1 | iex"
 
 $rid = "win-x64"
 $binary = "scriptmcp.exe"
-$asset = "scriptmcp-$rid.mcpb"
-$url = "https://github.com/sithiro/ScriptMCP/releases/download/scriptmcp-v$Version/$asset"
-$installDir = "ScriptMCP v$Version"
+$repo = "sithiro/ScriptMCP"
 
-Write-Host "Downloading ScriptMCP v$Version for $rid..."
+# Get the latest release tag
+Write-Host "Checking latest version..."
+try {
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -UseBasicParsing -ErrorAction Stop
+    $tag = $release.tag_name
+} catch {
+    Write-Error "Failed to fetch latest release from GitHub."
+    Write-Error $_.Exception.Message
+    exit 1
+}
+
+# Extract version from tag (scriptmcp-v1.3.0 -> 1.3.0)
+$version = $tag -replace '^scriptmcp-v', ''
+$asset = "scriptmcp-$rid.mcpb"
+$url = "https://github.com/$repo/releases/download/$tag/$asset"
+$installDir = "ScriptMCP v$version"
+
+Write-Host "Downloading ScriptMCP v$version for $rid..."
 $tmpFile = [System.IO.Path]::GetTempFileName() + ".zip"
 
 try {
@@ -62,7 +63,7 @@ Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
 $mcpJson = @{
     mcpServers = @{
         scriptmcp = @{
-            command = "$installDir\$binary"
+            command = "$installDir/$binary"
             args = @()
         }
     }
@@ -71,7 +72,7 @@ $mcpJson = @{
 Set-Content -Path ".mcp.json" -Value $mcpJson -Encoding UTF8
 
 Write-Host ""
-Write-Host "ScriptMCP v$Version installed successfully!" -ForegroundColor Green
+Write-Host "ScriptMCP v$version installed successfully!" -ForegroundColor Green
 Write-Host "  Binary:   $installDir\$binary"
 Write-Host "  Config:   .mcp.json"
 Write-Host ""
