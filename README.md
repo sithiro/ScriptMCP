@@ -4,6 +4,20 @@ A script runtime for AI agents via the Model Context Protocol (MCP). ScriptMCP l
 
 ![ScriptMCP in Claude Code](snapshot4.png)
 
+## Install
+
+**Windows:**
+```
+powershell -c "irm https://sithiro.github.io/ScriptMCP/install.ps1 | iex"
+```
+
+**Linux/macOS:**
+```
+curl -fsSL https://sithiro.github.io/ScriptMCP/install.sh | bash
+```
+
+Run from the directory where you want ScriptMCP installed. The script downloads the latest release, extracts the MCP server, and creates a `.mcp.json` so Claude Code and Codex discover it automatically.
+
 ## Overview
 
 ScriptMCP exposes 20 MCP tools that together form a self-extending toolbox. You interact with the agent in natural language — the agent decides which tools to call.
@@ -174,7 +188,7 @@ For the full tool reference, see the [wiki](https://github.com/sithiro/ScriptMCP
 | `ScriptMCP.Plugin` | Claude Code plugin — slash commands, hooks, skills, and MCP server configuration |
 | `ScriptMCP.Tests` | Unit and integration tests |
 
-## Install
+## More Installation Options
 
 ### Claude Desktop
 
