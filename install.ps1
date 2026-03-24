@@ -60,16 +60,18 @@ try {
 Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
 
 # Create .mcp.json
-$mcpJson = @{
-    mcpServers = @{
-        scriptmcp = @{
-            command = "$installDir/$binary"
-            args = @()
-        }
+$mcpJson = @"
+{
+  "mcpServers": {
+    "scriptmcp": {
+      "command": "$installDir/$binary",
+      "args": []
     }
-} | ConvertTo-Json -Depth 4
+  }
+}
+"@
 
-Set-Content -Path ".mcp.json" -Value $mcpJson -Encoding UTF8
+[System.IO.File]::WriteAllText((Join-Path $PWD ".mcp.json"), $mcpJson)
 
 Write-Host ""
 Write-Host "ScriptMCP v$version installed successfully!" -ForegroundColor Green
