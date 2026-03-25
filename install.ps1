@@ -7,6 +7,7 @@
 $rid = "win-x64"
 $binary = "scriptmcp.exe"
 $repo = "sithiro/ScriptMCP"
+$baseUrl = "https://raw.githubusercontent.com/$repo/main"
 
 # Get the latest release tag
 Write-Host "Checking latest version..."
@@ -58,97 +59,32 @@ try {
 
 Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
 
-$binaryPath = "$installDir/$binary"
+# Download install-mcp.ps1 and uninstall-mcp.ps1 into the ScriptMCP folder
+Write-Host "Downloading helper scripts..."
+try {
+    Invoke-WebRequest -Uri "$baseUrl/install-mcp.ps1" -OutFile (Join-Path $installDir "install-mcp.ps1") -UseBasicParsing -ErrorAction Stop
+    Invoke-WebRequest -Uri "$baseUrl/uninstall-mcp.ps1" -OutFile (Join-Path $installDir "uninstall-mcp.ps1") -UseBasicParsing -ErrorAction Stop
+} catch {
+    Write-Warning "Could not download helper scripts: $($_.Exception.Message)"
+}
 
 Write-Host ""
 Write-Host "ScriptMCP v$version downloaded to '$installDir'" -ForegroundColor Green
 Write-Host ""
 
-# Ask which agents to integrate with
-Write-Host "Which agents would you like to integrate with?"
-Write-Host "  1) Claude Code"
-Write-Host "  2) Codex"
-Write-Host "  3) Copilot (VS Code)"
-Write-Host "  4) All detected"
-Write-Host "  5) None (create .mcp.json fallback)"
-Write-Host ""
-$choice = Read-Host "Enter choice (1-5)"
-
-$registered = $false
-
-# Claude Code
-if ($choice -eq '1' -or $choice -eq '4') {
-    $claude = Get-Command claude -ErrorAction SilentlyContinue
-    if ($claude) {
-        Write-Host "Registering with Claude Code..."
-        Write-Host "  > claude mcp add -s user -t stdio scriptmcp -- $binaryPath" -ForegroundColor DarkGray
-        & claude.exe mcp add -s user -t stdio scriptmcp -- $binaryPath
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  Claude Code: registered" -ForegroundColor Green
-            $registered = $true
-        } else {
-            Write-Host "  Claude Code: failed" -ForegroundColor Red
-        }
-    } else {
-        Write-Host "  Claude Code: not installed (skipped)" -ForegroundColor Yellow
-    }
-}
-
-# Codex
-if ($choice -eq '2' -or $choice -eq '4') {
-    $codex = Get-Command codex -ErrorAction SilentlyContinue
-    if ($codex) {
-        Write-Host "Registering with Codex..."
-        Write-Host "  > codex mcp add scriptmcp -- $binaryPath" -ForegroundColor DarkGray
-        & codex.cmd mcp add scriptmcp -- $binaryPath
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  Codex: registered" -ForegroundColor Green
-            $registered = $true
-        } else {
-            Write-Host "  Codex: failed" -ForegroundColor Red
-        }
-    } else {
-        Write-Host "  Codex: not installed (skipped)" -ForegroundColor Yellow
-    }
-}
-
-# Copilot (VS Code)
-if ($choice -eq '3' -or $choice -eq '4') {
-    $code = Get-Command code -ErrorAction SilentlyContinue
-    if ($code) {
-        Write-Host "Registering with Copilot (VS Code)..."
-        $mcpJson = '{"name":"scriptmcp","command":"' + $binaryPath + '","args":[]}'
-        Write-Host "  > code --add-mcp '$mcpJson'" -ForegroundColor DarkGray
-        & cmd.exe /c "code --add-mcp `"$mcpJson`""
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  Copilot: registered" -ForegroundColor Green
-            $registered = $true
-        } else {
-            Write-Host "  Copilot: failed" -ForegroundColor Red
-        }
-    } else {
-        Write-Host "  VS Code: not installed (skipped)" -ForegroundColor Yellow
-    }
-}
-
-# Fallback: create .mcp.json if nothing was registered
-if ($choice -eq '5' -or -not $registered) {
-    if (-not $registered) {
-        Write-Host "Creating .mcp.json in current directory..."
-    }
-    $mcpJson = @"
-{
-  "mcpServers": {
-    "scriptmcp": {
-      "command": "$binaryPath",
-      "args": []
-    }
-  }
-}
-"@
-    [System.IO.File]::WriteAllText((Join-Path $PWD ".mcp.json"), $mcpJson)
-    Write-Host "  Created .mcp.json" -ForegroundColor Green
+# Run install-mcp.ps1 from the ScriptMCP folder
+$installMcp = Join-Path $installDir "install-mcp.ps1"
+if (Test-Path $installMcp) {
+    Push-Location $installDir
+    & powershell.exe -ExecutionPolicy Bypass -File "install-mcp.ps1"
+    Pop-Location
+} else {
+    Write-Host "install-mcp.ps1 not found. Register manually by running:" -ForegroundColor Yellow
+    Write-Host "  cd '$installDir'" -ForegroundColor Yellow
+    Write-Host "  .\install-mcp.ps1" -ForegroundColor Yellow
 }
 
 Write-Host ""
-Write-Host "Done!" -ForegroundColor Green
+Write-Host "To unregister later, run:" -ForegroundColor DarkGray
+Write-Host "  cd '$installDir'" -ForegroundColor DarkGray
+Write-Host "  .\uninstall-mcp.ps1" -ForegroundColor DarkGray
