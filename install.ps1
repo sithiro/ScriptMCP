@@ -1,5 +1,5 @@
 # ScriptMCP Installer (Windows PowerShell)
-# Downloads the latest ScriptMCP MCP server and registers it with Claude Code and/or Codex.
+# Downloads the latest ScriptMCP MCP server and registers it with Claude Code, Codex, and/or Copilot.
 #
 # Usage:
 #   powershell -c "irm https://sithiro.github.io/ScriptMCP/install.ps1 | iex"
@@ -64,35 +64,63 @@ Write-Host ""
 Write-Host "ScriptMCP v$version downloaded to '$installDir'" -ForegroundColor Green
 Write-Host ""
 
+# Ask which agents to integrate with
+Write-Host "Which agents would you like to integrate with?"
+Write-Host "  1) Claude Code"
+Write-Host "  2) Codex"
+Write-Host "  3) Copilot (VS Code)"
+Write-Host "  4) All detected"
+Write-Host "  5) None (create .mcp.json fallback)"
+Write-Host ""
+$choice = Read-Host "Enter choice (1-5)"
+
 $registered = $false
 
-# Register with Claude Code
-$claude = Get-Command claude -ErrorAction SilentlyContinue
-if ($claude) {
-    $answer = Read-Host "Register with Claude Code? (y/n)"
-    if ($answer -match '^[yY]') {
+# Claude Code
+if ($choice -eq '1' -or $choice -eq '4') {
+    $claude = Get-Command claude -ErrorAction SilentlyContinue
+    if ($claude) {
         Write-Host "Registering with Claude Code..."
         & claude.exe mcp add -s user -t stdio scriptmcp -- $binaryPath
         Write-Host "  Claude Code: registered" -ForegroundColor Green
         $registered = $true
+    } else {
+        Write-Host "  Claude Code: not installed (skipped)" -ForegroundColor Yellow
     }
 }
 
-# Register with Codex
-$codex = Get-Command codex -ErrorAction SilentlyContinue
-if ($codex) {
-    $answer = Read-Host "Register with Codex? (y/n)"
-    if ($answer -match '^[yY]') {
+# Codex
+if ($choice -eq '2' -or $choice -eq '4') {
+    $codex = Get-Command codex -ErrorAction SilentlyContinue
+    if ($codex) {
         Write-Host "Registering with Codex..."
         & codex.cmd mcp add scriptmcp -- $binaryPath
         Write-Host "  Codex: registered" -ForegroundColor Green
         $registered = $true
+    } else {
+        Write-Host "  Codex: not installed (skipped)" -ForegroundColor Yellow
+    }
+}
+
+# Copilot (VS Code)
+if ($choice -eq '3' -or $choice -eq '4') {
+    $code = Get-Command code -ErrorAction SilentlyContinue
+    if ($code) {
+        Write-Host "Registering with Copilot (VS Code)..."
+        $mcpArg = "{`"name`":`"scriptmcp`",`"command`":`"$($binaryPath -replace '\\','/')`",`"args`":[]}"
+        & code.cmd --add-mcp $mcpArg
+        Write-Host "  Copilot: registered" -ForegroundColor Green
+        $registered = $true
+    } else {
+        Write-Host "  VS Code: not installed (skipped)" -ForegroundColor Yellow
     }
 }
 
 # Fallback: create .mcp.json if nothing was registered
-if (-not $registered) {
-    Write-Host "No CLI detected or selected. Creating .mcp.json in current directory..."
+if ($choice -eq '5' -or -not $registered) {
+    if (-not $registered) {
+        Write-Host "Creating .mcp.json in current directory..."
+    }
     $mcpJson = @"
 {
   "mcpServers": {

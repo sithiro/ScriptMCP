@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ScriptMCP Installer (Linux/macOS)
-# Downloads the latest ScriptMCP MCP server and registers it with Claude Code and/or Codex.
+# Downloads the latest ScriptMCP MCP server and registers it with Claude Code, Codex, and/or Copilot.
 #
 # Usage:
 #   curl -fsSL https://sithiro.github.io/ScriptMCP/install.sh | bash
@@ -75,33 +75,60 @@ echo ""
 echo "ScriptMCP v${VERSION} downloaded to '${INSTALL_DIR}'"
 echo ""
 
+# Ask which agents to integrate with
+echo "Which agents would you like to integrate with?"
+echo "  1) Claude Code"
+echo "  2) Codex"
+echo "  3) Copilot (VS Code)"
+echo "  4) All detected"
+echo "  5) None (create .mcp.json fallback)"
+echo ""
+read -r -p "Enter choice (1-5): " choice
+
 REGISTERED=false
 
-# Register with Claude Code
-if command -v claude &>/dev/null; then
-  read -r -p "Register with Claude Code? (y/n) " answer
-  if [[ "$answer" =~ ^[yY] ]]; then
+# Claude Code
+if [ "$choice" = "1" ] || [ "$choice" = "4" ]; then
+  if command -v claude &>/dev/null; then
     echo "Registering with Claude Code..."
     claude mcp add -s user -t stdio scriptmcp -- "$BINARY_PATH"
     echo "  Claude Code: registered"
     REGISTERED=true
+  else
+    echo "  Claude Code: not installed (skipped)"
   fi
 fi
 
-# Register with Codex
-if command -v codex &>/dev/null; then
-  read -r -p "Register with Codex? (y/n) " answer
-  if [[ "$answer" =~ ^[yY] ]]; then
+# Codex
+if [ "$choice" = "2" ] || [ "$choice" = "4" ]; then
+  if command -v codex &>/dev/null; then
     echo "Registering with Codex..."
     codex mcp add scriptmcp -- "$BINARY_PATH"
     echo "  Codex: registered"
     REGISTERED=true
+  else
+    echo "  Codex: not installed (skipped)"
+  fi
+fi
+
+# Copilot (VS Code)
+if [ "$choice" = "3" ] || [ "$choice" = "4" ]; then
+  if command -v code &>/dev/null; then
+    echo "Registering with Copilot (VS Code)..."
+    code --add-mcp "{\"name\":\"scriptmcp\",\"command\":\"$BINARY_PATH\",\"args\":[]}"
+    echo "  Copilot: registered"
+    REGISTERED=true
+  else
+    echo "  VS Code: not installed (skipped)"
   fi
 fi
 
 # Fallback: create .mcp.json if nothing was registered
-if [ "$REGISTERED" = false ]; then
-  echo "No CLI detected or selected. Creating .mcp.json in current directory..."
+if [ "$choice" = "5" ] || [ "$REGISTERED" = false ]; then
+  if [ "$REGISTERED" = false ] && [ "$choice" != "5" ]; then
+    echo "Selected agent not detected."
+  fi
+  echo "Creating .mcp.json in current directory..."
   cat > .mcp.json <<MCPJSON
 {
   "mcpServers": {
