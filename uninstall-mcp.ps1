@@ -53,13 +53,24 @@ if ($choice -eq '2' -or $choice -eq '4') {
 
 # Copilot (VS Code)
 if ($choice -eq '3' -or $choice -eq '4') {
-    $code = Get-Command code -ErrorAction SilentlyContinue
-    if ($code) {
+    $mcpConfigFile = Join-Path $env:APPDATA "Code\User\mcp.json"
+    if (Test-Path $mcpConfigFile) {
         Write-Host "Removing from Copilot (VS Code)..."
-        Write-Host "  Copilot does not support CLI removal. Remove 'scriptmcp' manually:" -ForegroundColor Yellow
-        Write-Host "    VS Code > Command Palette > MCP: List Servers > Remove scriptmcp" -ForegroundColor Yellow
+        Write-Host "  > Removing 'scriptmcp' from $mcpConfigFile" -ForegroundColor DarkGray
+        try {
+            $mcpConfig = Get-Content $mcpConfigFile -Raw | ConvertFrom-Json -AsHashtable
+            if ($mcpConfig.ContainsKey('servers') -and $mcpConfig['servers'].ContainsKey('scriptmcp')) {
+                $mcpConfig['servers'].Remove('scriptmcp')
+                $mcpConfig | ConvertTo-Json -Depth 10 | Set-Content $mcpConfigFile -Encoding UTF8
+                Write-Host "  Copilot: removed" -ForegroundColor Green
+            } else {
+                Write-Host "  Copilot: scriptmcp not found in config" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "  Copilot: failed to parse $mcpConfigFile" -ForegroundColor Red
+        }
     } else {
-        Write-Host "  VS Code: not installed (skipped)" -ForegroundColor Yellow
+        Write-Host "  Copilot: no mcp.json found (skipped)" -ForegroundColor Yellow
     }
 }
 

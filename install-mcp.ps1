@@ -37,8 +37,9 @@ if ($choice -eq '1' -or $choice -eq '4') {
     if ($claude) {
         Write-Host "Registering with Claude Code..."
         Write-Host "  > claude mcp add -s user -t stdio scriptmcp -- $binaryPath" -ForegroundColor DarkGray
-        & claude.exe mcp add -s user -t stdio scriptmcp -- $binaryPath
-        if ($LASTEXITCODE -eq 0) {
+        $output = & claude.exe mcp add -s user -t stdio scriptmcp -- $binaryPath 2>&1
+        Write-Host "  $output"
+        if ($LASTEXITCODE -eq 0 -or $output -match 'already exists') {
             Write-Host "  Claude Code: registered" -ForegroundColor Green
             $registered = $true
         } else {
@@ -55,8 +56,9 @@ if ($choice -eq '2' -or $choice -eq '4') {
     if ($codex) {
         Write-Host "Registering with Codex..."
         Write-Host "  > codex mcp add scriptmcp -- $binaryPath" -ForegroundColor DarkGray
-        & codex.cmd mcp add scriptmcp -- $binaryPath
-        if ($LASTEXITCODE -eq 0) {
+        $output = & codex.cmd mcp add scriptmcp -- $binaryPath 2>&1
+        Write-Host "  $output"
+        if ($LASTEXITCODE -eq 0 -or $output -match 'already exists') {
             Write-Host "  Codex: registered" -ForegroundColor Green
             $registered = $true
         } else {
@@ -72,15 +74,41 @@ if ($choice -eq '3' -or $choice -eq '4') {
     $code = Get-Command code -ErrorAction SilentlyContinue
     if ($code) {
         Write-Host "Registering with Copilot (VS Code)..."
-        $mcpJson = '{"name":"scriptmcp","command":"' + $binaryPath + '","args":[]}'
-        Write-Host "  > code --add-mcp '$mcpJson'" -ForegroundColor DarkGray
-        & cmd.exe /c "code --add-mcp `"$mcpJson`""
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  Copilot: registered" -ForegroundColor Green
-            $registered = $true
-        } else {
-            Write-Host "  Copilot: failed" -ForegroundColor Red
+        # Write directly to VS Code user mcp.json (code --add-mcp has quoting issues)
+        $mcpConfigDir = Join-Path $env:APPDATA "Code\User"
+        $mcpConfigFile = Join-Path $mcpConfigDir "mcp.json"
+        Write-Host "  > Writing to $mcpConfigFile" -ForegroundColor DarkGray
+
+        # Read existing config or start fresh
+        $mcpConfig = @{}
+        if (Test-Path $mcpConfigFile) {
+            try {
+                $mcpConfig = Get-Content $mcpConfigFile -Raw | ConvertFrom-Json -AsHashtable
+            } catch {
+                $mcpConfig = @{}
+            }
         }
+
+        # Ensure servers key exists
+        if (-not $mcpConfig.ContainsKey('servers')) {
+            $mcpConfig['servers'] = @{}
+        }
+
+        # Add or update scriptmcp entry
+        $mcpConfig['servers']['scriptmcp'] = @{
+            type = "stdio"
+            command = $binaryPath
+            args = @()
+        }
+
+        # Write back
+        if (-not (Test-Path $mcpConfigDir)) {
+            New-Item -ItemType Directory -Path $mcpConfigDir -Force | Out-Null
+        }
+        $mcpConfig | ConvertTo-Json -Depth 10 | Set-Content $mcpConfigFile -Encoding UTF8
+
+        Write-Host "  Copilot: registered" -ForegroundColor Green
+        $registered = $true
     } else {
         Write-Host "  VS Code: not installed (skipped)" -ForegroundColor Yellow
     }
