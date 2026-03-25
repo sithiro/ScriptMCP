@@ -16,17 +16,12 @@ powershell -c "irm https://sithiro.github.io/ScriptMCP/install.ps1 | iex"
 curl -fsSL https://sithiro.github.io/ScriptMCP/install.sh | bash
 ```
 
-The Windows installer will prompt you to register with your agents. On Linux/macOS, the script prints the commands to run. You can also register manually:
+After downloading, register with your agent:
 
 ```bash
-# Claude Code
-claude mcp add -s user -t stdio scriptmcp -- /path/to/scriptmcp
-
-# Codex
-codex mcp add scriptmcp -- /path/to/scriptmcp
-
-# Copilot (VS Code)
-code --add-mcp '{"name":"scriptmcp","command":"/path/to/scriptmcp","args":[]}'
+claude mcp add -s user -t stdio scriptmcp -- /path/to/scriptmcp       # Claude Code
+codex mcp add scriptmcp -- /path/to/scriptmcp                          # Codex
+code --add-mcp '{"name":"scriptmcp","command":"/path/to/scriptmcp","args":[]}' # Copilot
 ```
 
 ## Overview
