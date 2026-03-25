@@ -69,7 +69,7 @@ if [ "$RID" != "win-x64" ]; then
   chmod +x "$INSTALL_DIR/$BINARY"
 fi
 
-BINARY_PATH="$(cd "$INSTALL_DIR" && pwd)/$BINARY"
+BINARY_PATH="${INSTALL_DIR}/${BINARY}"
 
 echo ""
 echo "ScriptMCP v${VERSION} downloaded to '${INSTALL_DIR}'"

@@ -58,7 +58,7 @@ try {
 
 Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
 
-$binaryPath = (Resolve-Path (Join-Path $installDir $binary)).Path
+$binaryPath = "$installDir/$binary"
 
 Write-Host ""
 Write-Host "ScriptMCP v$version downloaded to '$installDir'" -ForegroundColor Green

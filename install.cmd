@@ -44,10 +44,7 @@ move "!INSTALL_DIR!\server\%BINARY%" "!INSTALL_DIR!\" >nul
 rmdir /s /q "!INSTALL_DIR!\server" 2>nul
 del "%TEMP%\scriptmcp.zip" 2>nul
 
-:: Get absolute path to binary
-pushd "!INSTALL_DIR!"
-set "BINARY_PATH=!CD!\%BINARY%"
-popd
+set "BINARY_PATH=!INSTALL_DIR!/%BINARY%"
 
 echo.
 echo ScriptMCP v!VERSION! downloaded to '!INSTALL_DIR!'
