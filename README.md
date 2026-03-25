@@ -13,16 +13,7 @@ powershell -c "irm https://sithiro.github.io/ScriptMCP/install.ps1 | iex"
 
 **Linux/macOS:**
 ```bash
-# Download and extract (example: linux-x64)
-curl -fSL https://github.com/sithiro/ScriptMCP/releases/latest/download/scriptmcp-linux-x64.mcpb -o scriptmcp.zip
-mkdir -p scriptmcp && unzip -o scriptmcp.zip server/scriptmcp -d scriptmcp
-mv scriptmcp/server/scriptmcp scriptmcp/ && rm -rf scriptmcp/server scriptmcp.zip
-chmod +x scriptmcp/scriptmcp
-
-# Register with your agent
-claude mcp add -s user -t stdio scriptmcp -- $(pwd)/scriptmcp/scriptmcp        # Claude Code
-codex mcp add scriptmcp -- $(pwd)/scriptmcp/scriptmcp                           # Codex
-code --add-mcp '{"name":"scriptmcp","command":"'$(pwd)'/scriptmcp/scriptmcp","args":[]}' # Copilot
+curl -fsSL https://sithiro.github.io/ScriptMCP/install.sh | bash
 ```
 
 ## Overview
