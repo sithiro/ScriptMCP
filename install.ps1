@@ -107,8 +107,8 @@ if ($choice -eq '3' -or $choice -eq '4') {
     $code = Get-Command code -ErrorAction SilentlyContinue
     if ($code) {
         Write-Host "Registering with Copilot (VS Code)..."
-        $mcpArg = "{`"name`":`"scriptmcp`",`"command`":`"$($binaryPath -replace '\\','/')`",`"args`":[]}"
-        & code.cmd --add-mcp $mcpArg
+        $mcpObj = @{ name = "scriptmcp"; command = $binaryPath; args = @() } | ConvertTo-Json -Compress
+        & code.cmd --add-mcp $mcpObj
         Write-Host "  Copilot: registered" -ForegroundColor Green
         $registered = $true
     } else {
