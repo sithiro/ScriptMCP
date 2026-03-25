@@ -1,5 +1,5 @@
 # ScriptMCP Installer (Windows PowerShell)
-# Downloads the latest ScriptMCP MCP server and registers it with Claude Code, Codex, and/or Copilot.
+# Downloads the latest ScriptMCP MCP server.
 #
 # Usage:
 #   powershell -c "irm https://sithiro.github.io/ScriptMCP/install.ps1 | iex"
@@ -7,7 +7,6 @@
 $rid = "win-x64"
 $binary = "scriptmcp.exe"
 $repo = "sithiro/ScriptMCP"
-$baseUrl = "https://raw.githubusercontent.com/$repo/main"
 
 # Get the latest release tag
 Write-Host "Checking latest version..."
@@ -59,32 +58,18 @@ try {
 
 Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue
 
-# Download install-mcp.ps1 and uninstall-mcp.ps1 into the ScriptMCP folder
-Write-Host "Downloading helper scripts..."
-try {
-    Invoke-WebRequest -Uri "$baseUrl/install-mcp.ps1" -OutFile (Join-Path $installDir "install-mcp.ps1") -UseBasicParsing -ErrorAction Stop
-    Invoke-WebRequest -Uri "$baseUrl/uninstall-mcp.ps1" -OutFile (Join-Path $installDir "uninstall-mcp.ps1") -UseBasicParsing -ErrorAction Stop
-} catch {
-    Write-Warning "Could not download helper scripts: $($_.Exception.Message)"
-}
+$binaryPath = (Resolve-Path (Join-Path $installDir $binary)).Path -replace '\\', '/'
 
 Write-Host ""
-Write-Host "ScriptMCP v$version downloaded to '$installDir'" -ForegroundColor Green
+Write-Host "ScriptMCP v$version installed to '$installDir'" -ForegroundColor Green
 Write-Host ""
-
-# Run install-mcp.ps1 from the ScriptMCP folder
-$installMcp = Join-Path $installDir "install-mcp.ps1"
-if (Test-Path $installMcp) {
-    Push-Location $installDir
-    . ".\install-mcp.ps1"
-    Pop-Location
-} else {
-    Write-Host "install-mcp.ps1 not found. Register manually by running:" -ForegroundColor Yellow
-    Write-Host "  cd '$installDir'" -ForegroundColor Yellow
-    Write-Host "  .\install-mcp.ps1" -ForegroundColor Yellow
-}
-
+Write-Host "Register with your agent:"
 Write-Host ""
-Write-Host "To unregister later, run:" -ForegroundColor DarkGray
-Write-Host "  cd '$installDir'" -ForegroundColor DarkGray
-Write-Host "  .\uninstall-mcp.ps1" -ForegroundColor DarkGray
+Write-Host "  claude mcp add -s user -t stdio scriptmcp -- `"$binaryPath`"" -ForegroundColor Cyan
+Write-Host "  codex mcp add scriptmcp -- `"$binaryPath`"" -ForegroundColor Cyan
+Write-Host "  code --add-mcp '{`"name`":`"scriptmcp`",`"command`":`"$binaryPath`",`"args`":[]}'" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "To unregister:"
+Write-Host ""
+Write-Host "  claude mcp remove -s user scriptmcp" -ForegroundColor DarkGray
+Write-Host "  codex mcp remove scriptmcp" -ForegroundColor DarkGray
