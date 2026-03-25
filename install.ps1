@@ -76,7 +76,7 @@ Write-Host ""
 $installMcp = Join-Path $installDir "install-mcp.ps1"
 if (Test-Path $installMcp) {
     Push-Location $installDir
-    & powershell.exe -ExecutionPolicy Bypass -File "install-mcp.ps1"
+    . ".\install-mcp.ps1"
     Pop-Location
 } else {
     Write-Host "install-mcp.ps1 not found. Register manually by running:" -ForegroundColor Yellow
