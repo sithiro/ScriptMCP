@@ -6,17 +6,23 @@ A script runtime for AI agents via the Model Context Protocol (MCP). ScriptMCP l
 
 ## Install
 
-**Windows:**
+**Windows (PowerShell):**
 ```
 powershell -c "irm https://sithiro.github.io/ScriptMCP/install.ps1 | iex"
 ```
 
-**Linux/macOS:**
-```
-curl -fsSL https://sithiro.github.io/ScriptMCP/install.sh | bash
-```
+**Linux/macOS:** Download the `.mcpb` for your platform from the [latest release](https://github.com/sithiro/ScriptMCP/releases/latest), extract the binary, and register it:
 
-Run from the directory where you want ScriptMCP installed. The script downloads the latest release, extracts the MCP server, and registers it with Claude Code and/or Codex.
+```bash
+# Claude Code
+claude mcp add -s user -t stdio scriptmcp -- /path/to/scriptmcp
+
+# Codex
+codex mcp add scriptmcp -- /path/to/scriptmcp
+
+# Copilot (VS Code)
+code --add-mcp '{"name":"scriptmcp","command":"/path/to/scriptmcp","args":[]}'
+```
 
 ## Overview
 
