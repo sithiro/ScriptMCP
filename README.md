@@ -2,7 +2,7 @@
 
 A script runtime for AI agents via the Model Context Protocol (MCP). ScriptMCP lets your AI agent create, compile, and execute C# scripts on the fly — no restart required. Scripts persist in a local SQLite database and can be invoked in-process or out-of-process for parallel execution.
 
-![ScriptMCP in Claude Code](snapshot4.png)
+![ScriptMCP in Claude Code](snapshot4_7.gif)
 
 ## Install
 
