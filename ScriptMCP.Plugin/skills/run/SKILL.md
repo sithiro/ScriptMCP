@@ -38,6 +38,11 @@ The key signal is that the user's request maps directly to what a registered scr
 5. If the script requires arguments, extract them from the query or ask the user to provide them
 6. Call `call_script` with the name and arguments
 
+If the exact same script was already uniquely resolved and inspected earlier in the current conversation, and the
+user's follow-up clearly refers to that same script, skip `list_scripts` and `inspect_script` and call it directly.
+Re-run discovery only if the request became ambiguous, the active database changed, or the user appears to be asking
+for a different script.
+
 ## Handling Output
 
 - Return the output exactly as received — do not add, remove, wrap, or modify the output in any way

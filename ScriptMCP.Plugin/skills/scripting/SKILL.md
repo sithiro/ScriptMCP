@@ -340,6 +340,10 @@ Users who have previously created scripts will often request their execution wit
 3. If exactly one script matches, inspect it and call it
 4. If multiple scripts could match, ask the user to clarify
 
+If the same script was already uniquely resolved and inspected earlier in the current conversation, and the user's
+follow-up clearly refers to that same script, reuse that prior resolution and call it directly instead of repeating
+`list_scripts` and `inspect_script`.
+
 **Examples of implied execution:**
 
 | User says                      | Likely script                  | Why                                         |
@@ -355,17 +359,18 @@ The key signal is that the user's request maps directly to what a registered scr
 
 ## Best Practices
 
-1. **Always list scripts first** — call `list_scripts` at conversation start to discover available tools
+1. **List scripts at conversation start** — call `list_scripts` once at the start of the conversation to discover available tools
 2. **Inspect before calling** — use `inspect_script` to verify parameters and purpose before execution
-3. **Prefer existing scripts** — check if a suitable script already exists before creating a new one
-4. **One field at a time** — use `update_script` for targeted edits, not wholesale rewrites
-5. **Handle compilation errors** — if creation fails, fix the C# errors and re-register
-6. **Use out-of-process for safety** — use `call_process` for untrusted or long-running operations
-7. **Keep scripts focused** — each script should do one thing well
-8. **Descriptive naming** — use clear, descriptive script names (e.g., `fetch_weather`, `parse_csv`)
-9. **Filesystem-safe names** — script names must contain only letters, numbers, underscore, or hyphen
-10. **Confirm destructive database actions** — use `delete_database` only after explicit user approval
-11. **Do not auto-create databases** — use `set_database(create=true)` only after the user confirms creation
+3. **Reuse resolved follow-ups** — if a script was already uniquely resolved and inspected in the current conversation, clearly-referential follow-ups may call it directly
+4. **Prefer existing scripts** — check if a suitable script already exists before creating a new one
+5. **One field at a time** — use `update_script` for targeted edits, not wholesale rewrites
+6. **Handle compilation errors** — if creation fails, fix the C# errors and re-register
+7. **Use out-of-process for safety** — use `call_process` for untrusted or long-running operations
+8. **Keep scripts focused** — each script should do one thing well
+9. **Descriptive naming** — use clear, descriptive script names (e.g., `fetch_weather`, `parse_csv`)
+10. **Filesystem-safe names** — script names must contain only letters, numbers, underscore, or hyphen
+11. **Confirm destructive database actions** — use `delete_database` only after explicit user approval
+12. **Do not auto-create databases** — use `set_database(create=true)` only after the user confirms creation
 
 ## Persistence
 

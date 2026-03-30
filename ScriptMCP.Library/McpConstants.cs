@@ -15,6 +15,11 @@ public static class McpConstants
     public const string Instructions =
         "IMPORTANT: At the start of every conversation, you MUST call list_scripts before answering any user query, " +
         "to discover available dynamic tools. " +
+        "After that initial discovery step, if a script has already been uniquely resolved and successfully inspected in the " +
+        "current conversation, and the user's follow-up clearly refers to that same script, do NOT repeat list_scripts or " +
+        "inspect_script for that follow-up. Call the already-resolved script directly unless the active database changed, " +
+        "the request became ambiguous, the user broadened or redirected the task, or there is another concrete reason to " +
+        "re-evaluate script selection. " +
         "Each script has a Type field that tells you how to use it: " +
         "- Type 'code': call it via call_script and return the result to the user. " +
         "- Type 'instructions': call call_script to retrieve the instructions, then read and follow them yourself " +
@@ -50,6 +55,9 @@ public static class McpConstants
         "2) If exactly one promising existing script remains, call inspect_script on that one before deciding whether to use it. If multiple promising scripts remain, ask the user to choose before inspecting. " +
         "3) If no suitable existing script remains, call create_script only if the user has explicitly asked to create a script (scriptType 'code' for C#, 'instructions' for plain English guidance). " +
         "4) Call call_script to invoke it. " +
+        "For repeated follow-up requests in the same conversation, if the exact script choice was already resolved and " +
+        "inspected earlier in that conversation, reuse that resolution and call the script directly instead of restarting " +
+        "the list_scripts -> inspect_script flow. " +
         "When the user wants to load a script from a local file, call load_script. " +
         "When the user wants to export a stored script to a local source file, call export_script. " +
         "When the user wants to modify an existing script instead of creating a new one, use this workflow: " +
