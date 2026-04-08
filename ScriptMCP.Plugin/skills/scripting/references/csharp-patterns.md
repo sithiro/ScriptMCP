@@ -346,8 +346,10 @@ Call `create_scheduled_task` directly — it is a native MCP tool, not a script:
 - `function_args`: JSON arguments (default `"{}"`)
 - `interval_minutes`: recurrence interval
 - `append`: when true, append to `<function>.txt` instead of creating a new timestamped file per run
+- `rewrite`: when true, overwrite `<function>.txt` each run (takes precedence over append)
+- `telegram`: set to `"true"` to send output to Telegram using default `telegram.json`, or provide a custom path
 
-The task runs via `--exec-out`, which by default writes each result to a timestamped file in `output`. With append mode it uses `--exec-out-append` and appends to `<function>.txt`.
+The task runs via `--exec-out`, which by default writes each result to a timestamped file in `output`. With append mode it uses `--exec-out-append` and appends to `<function>.txt`. With rewrite mode it uses `--exec-out-rewrite` and overwrites `<function>.txt` each run. With telegram enabled, output is also sent to the configured Telegram channel.
 
 Call `delete_scheduled_task` directly to remove a scheduled task:
 
@@ -374,9 +376,15 @@ Call `stop_scheduled_task` directly to disable a task:
 
 ### Read Exec Output (Native Tool)
 
-Call `read_scheduled_task` directly to read the result written for a script by scheduled tasks or `--exec-out` / `--exec-out-append`:
+Call `read_scheduled_task` directly to read the result written for a script by scheduled tasks or `--exec-out` / `--exec-out-append` / `--exec-out-rewrite`:
 
 - `function_name`: required, returns `<function>.txt` if append mode is active; otherwise the latest matching timestamped file
+
+### Telegram Notifications
+
+The CLI supports `--telegram [filepath]` to send script output to a Telegram channel alongside any `--exec*` mode. If no filepath is given, it looks for `telegram.json` beside the active database. The file must contain `botToken` and `chatId`. Telegram failures are non-fatal (warning to stderr).
+
+For one-off execution with Telegram delivery, use `call_process` with the `telegram` parameter set to `"true"` (default `telegram.json`) or a custom path. This applies whenever the user wants a script's output sent to Telegram outside of scheduled tasks.
 
 ### Writing Scripts for Scheduled Use
 

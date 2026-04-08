@@ -61,7 +61,8 @@ public class ScriptTools
     {
         Default,
         WriteNew,
-        WriteAppend
+        WriteAppend,
+        WriteRewrite
     }
 
     private static bool _initialized;
@@ -1064,19 +1065,21 @@ public class ScriptTools
     public string CallProcess(
         [Description("The name of the script to call")] string name,
         [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}",
-        [Description("Output mode: Default (uses --exec, no persisted output file), WriteNew (uses --exec-out, writes a new file per execution), WriteAppend (uses --exec-out-append, appends to one stable file)")] string output_mode = "Default")
+        [Description("Output mode: Default (uses --exec, no persisted output file), WriteNew (uses --exec-out, writes a new file per execution), WriteAppend (uses --exec-out-append, appends to one stable file), WriteRewrite (uses --exec-out-rewrite, overwrites one stable file each run)")] string output_mode = "Default",
+        [Description("When true, send the script output to a Telegram channel using telegram.json beside the database. Or provide a custom path to telegram.json.")] string telegram = "")
     {
         var exePath = Environment.ProcessPath;
         if (string.IsNullOrEmpty(exePath))
             return "Error: unable to resolve the current executable path.";
 
         if (!Enum.TryParse<ScriptProcessOutputMode>(output_mode, ignoreCase: true, out var outputMode))
-            return "Error: invalid output_mode. Supported values: Default, WriteNew, WriteAppend.";
+            return "Error: invalid output_mode. Supported values: Default, WriteNew, WriteAppend, WriteRewrite.";
 
         var execFlag = outputMode switch
         {
             ScriptProcessOutputMode.WriteNew => "--exec-out",
             ScriptProcessOutputMode.WriteAppend => "--exec-out-append",
+            ScriptProcessOutputMode.WriteRewrite => "--exec-out-rewrite",
             _ => "--exec"
         };
 
@@ -1097,6 +1100,13 @@ public class ScriptTools
             psi.ArgumentList.Add(execFlag);
             psi.ArgumentList.Add(name);
             psi.ArgumentList.Add(arguments);
+
+            if (!string.IsNullOrWhiteSpace(telegram))
+            {
+                psi.ArgumentList.Add("--telegram");
+                if (!string.Equals(telegram, "true", StringComparison.OrdinalIgnoreCase))
+                    psi.ArgumentList.Add(telegram);
+            }
 
             var proc = System.Diagnostics.Process.Start(psi)!;
             proc.StandardInput.Close();
@@ -1220,16 +1230,26 @@ public class ScriptTools
         [Description("Name of the ScriptMCP script to run")] string function_name,
         [Description("JSON arguments for the script (default: {})")] string function_args = "{}",
         [Description("How often to run the task, in minutes")] int interval_minutes = 1,
-        [Description("When true, append each result to a stable <script>.txt file instead of creating a new timestamped file")] bool append = false)
+        [Description("When true, append each result to a stable <script>.txt file instead of creating a new timestamped file")] bool append = false,
+        [Description("When true, overwrite a stable <script>.txt file each run instead of creating a new timestamped file. Takes precedence over append.")] bool rewrite = false,
+        [Description("When true, do not write output to a file. Uses --exec instead of --exec-out. Useful with telegram for notification-only tasks.")] bool no_file = false,
+        [Description("When true, send the script output to a Telegram channel using telegram.json beside the database. Or provide a custom path to telegram.json.")] string telegram = "")
     {
         string exePath = Environment.ProcessPath ?? "";
         if (string.IsNullOrEmpty(exePath))
             return "Error: Unable to resolve the current executable path.";
 
+        var execFlag = no_file ? "--exec" : rewrite ? "--exec-out-rewrite" : append ? "--exec-out-append" : "--exec-out";
+        var telegramArg = !string.IsNullOrWhiteSpace(telegram) && !string.Equals(telegram, "true", StringComparison.OrdinalIgnoreCase)
+            ? $" --telegram \"{telegram.Replace("\"", "\\\"")}\""
+            : string.Equals(telegram, "true", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrEmpty(telegram)
+                ? " --telegram"
+                : "";
+
         if (OperatingSystem.IsWindows())
-            return CreateScheduledTaskWindows(exePath, function_name, function_args, interval_minutes, append);
+            return CreateScheduledTaskWindows(exePath, function_name, function_args, interval_minutes, execFlag, telegramArg);
         else
-            return CreateScheduledTaskCron(exePath, function_name, function_args, interval_minutes, append);
+            return CreateScheduledTaskCron(exePath, function_name, function_args, interval_minutes, execFlag, telegramArg);
     }
 
     [McpServerTool(Name = "delete_scheduled_task")]
@@ -1388,7 +1408,7 @@ public class ScriptTools
         return string.Join(Environment.NewLine, lines);
     }
 
-    private string CreateScheduledTaskWindows(string exePath, string function_name, string function_args, int interval_minutes, bool append)
+    private string CreateScheduledTaskWindows(string exePath, string function_name, string function_args, int interval_minutes, string execFlag, string telegramArg)
     {
         string tn = GetScheduledTaskName(function_name, interval_minutes);
 
@@ -1412,7 +1432,7 @@ public class ScriptTools
         psi.ArgumentList.Add("/TR");
         var dbArg = BuildDatabaseArgumentForShell();
         var taskCommand = new StringBuilder();
-        taskCommand.Append($"\"{exePath}\"{dbArg} {(append ? "--exec-out-append" : "--exec-out")} {function_name} \"{escapedArgs}\"");
+        taskCommand.Append($"\"{exePath}\"{dbArg} {execFlag} {function_name} \"{escapedArgs}\"{telegramArg}");
         psi.ArgumentList.Add(taskCommand.ToString());
         psi.ArgumentList.Add("/SC");
         psi.ArgumentList.Add("MINUTE");
@@ -1458,7 +1478,15 @@ public class ScriptTools
         sb.AppendLine($"  Script:   {function_name}({function_args})");
         sb.AppendLine($"  Exe:      {exePath}");
         sb.AppendLine($"  Interval: Every {interval_minutes} minute(s)");
-        sb.AppendLine($"  Output:   {(append ? "Append to <script>.txt" : "New timestamped file per run")}");
+        var outputDesc = execFlag switch
+        {
+            "--exec-out-append" => "Append to <script>.txt",
+            "--exec-out-rewrite" => "Overwrite <script>.txt each run",
+            _ => "New timestamped file per run"
+        };
+        sb.AppendLine($"  Output:   {outputDesc}");
+        if (!string.IsNullOrEmpty(telegramArg))
+            sb.AppendLine($"  Telegram: Enabled");
         sb.AppendLine();
         sb.AppendLine("Manage with:");
         sb.AppendLine($"  Run now:  schtasks /Run /TN \"{tn}\"");
@@ -1603,12 +1631,12 @@ public class ScriptTools
         return sb.ToString().Trim();
     }
 
-    private string CreateScheduledTaskCron(string exePath, string function_name, string function_args, int interval_minutes, bool append)
+    private string CreateScheduledTaskCron(string exePath, string function_name, string function_args, int interval_minutes, string execFlag, string telegramArg)
     {
         // Build the cron command line
         string escapedArgs = function_args.Replace("'", "'\\''");
         var dbArg = BuildDatabaseArgumentForShell();
-        string command = $"'{exePath}'{dbArg} {(append ? "--exec-out-append" : "--exec-out")} {function_name} '{escapedArgs}'";
+        string command = $"'{exePath}'{dbArg} {execFlag} {function_name} '{escapedArgs}'{telegramArg}";
 
         // Build the cron schedule expression
         string schedule = interval_minutes switch
@@ -1689,9 +1717,11 @@ public class ScriptTools
             CreateNoWindow = true
         };
         AppendDatabaseArgumentFromCurrentProcess(runPsi);
-        runPsi.ArgumentList.Add(append ? "--exec-out-append" : "--exec-out");
+        runPsi.ArgumentList.Add(execFlag);
         runPsi.ArgumentList.Add(function_name);
         runPsi.ArgumentList.Add(function_args);
+        if (!string.IsNullOrEmpty(telegramArg))
+            runPsi.ArgumentList.Add("--telegram");
         var runProc = System.Diagnostics.Process.Start(runPsi)!;
         runProc.StandardOutput.ReadToEnd();
         runProc.StandardError.ReadToEnd();
@@ -1703,7 +1733,15 @@ public class ScriptTools
         sb.AppendLine($"  Exe:      {exePath}");
         sb.AppendLine($"  Schedule: {schedule}");
         sb.AppendLine($"  Tag:      {tag}");
-        sb.AppendLine($"  Output:   {(append ? "Append to <script>.txt" : "New timestamped file per run")}");
+        var outputDesc = execFlag switch
+        {
+            "--exec-out-append" => "Append to <script>.txt",
+            "--exec-out-rewrite" => "Overwrite <script>.txt each run",
+            _ => "New timestamped file per run"
+        };
+        sb.AppendLine($"  Output:   {outputDesc}");
+        if (!string.IsNullOrEmpty(telegramArg))
+            sb.AppendLine($"  Telegram: Enabled");
         sb.AppendLine();
         sb.AppendLine("Manage with:");
         sb.AppendLine($"  List:     crontab -l");

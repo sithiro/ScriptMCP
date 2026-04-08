@@ -290,7 +290,7 @@ Set `append=true` only for the single-file behavior.
 On **Windows**, uses Task Scheduler (`schtasks`) and runs `scriptmcp.exe` directly.
 On **Linux/macOS**, uses cron. Each entry is tagged with `# ScriptMCP:<function_name>` for easy identification and removal.
 
-The task uses `--exec-out` mode. By default it writes the result to a timestamped file in `output` beside the ScriptMCP database. With `append=true`, it uses `--exec-out-append` and appends to `<function>.txt`.
+The task uses `--exec-out` mode. By default it writes the result to a timestamped file in `output` beside the ScriptMCP database. With `append=true`, it uses `--exec-out-append` and appends to `<function>.txt`. With `rewrite=true`, it uses `--exec-out-rewrite` and overwrites `<function>.txt` each run (rewrite takes precedence over append). Set `telegram` to `"true"` to also send output to Telegram using the default `telegram.json`, or provide a custom path to `telegram.json`.
 
 After creation, the task is immediately run once. The tool returns the task name and management commands (run, disable, delete).
 
@@ -319,11 +319,17 @@ Use `stop_scheduled_task` to disable a task:
 
 ### Reading Scheduled Task Output
 
-Use `read_scheduled_task` to read the result written for a script by `--exec-out` or `--exec-out-append`:
+Use `read_scheduled_task` to read the result written for a script by `--exec-out`, `--exec-out-append`, or `--exec-out-rewrite`:
 
 - **function_name**: Required. Returns `<function>.txt` if append mode is in use; otherwise returns the latest matching timestamped file.
 
-Each scheduled execution either writes a new file named like `<function>_YYMMDD_HHMMSS.txt` or appends to `<function>.txt`.
+Each scheduled execution either writes a new file named like `<function>_YYMMDD_HHMMSS.txt` or appends to/overwrites `<function>.txt`.
+
+### Telegram Notifications
+
+The CLI supports `--telegram [filepath]` to send script output to a Telegram channel. It works with any `--exec*` mode and is independent of file output. If no filepath is given, ScriptMCP looks for `telegram.json` beside the active database. The file must contain `botToken` and `chatId` fields. Messages over 4096 characters are split automatically. Failures are reported to stderr without stopping the process.
+
+For one-off execution with Telegram delivery, use `call_process` with the `telegram` parameter set to `"true"` (default `telegram.json`) or a custom path. This applies whenever the user wants a script's output sent to Telegram outside of scheduled tasks.
 
 ### Native Tools vs Scripts
 

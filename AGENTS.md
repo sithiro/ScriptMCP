@@ -111,9 +111,9 @@ NATIVE TOOLS: In addition to the script tools above, ScriptMCP provides these bu
   Parameter: function_name (string, required).
 - create_scheduled_task: Creates a scheduled task that runs a script at a recurring interval.
   On Windows, uses Task Scheduler (schtasks) and runs `scriptmcp.exe` directly. On Linux/macOS, uses cron.
-  Parameters: function_name (string, required), function_args (string, default "{}"), interval_minutes (int, required), append (bool, default false).
-  The task runs via --exec-out. By default it writes each execution result to a timestamped file in `output`; with append=true it uses --exec-out-append and appends to `<script>.txt`.
-  If the user wants a single output file reused across runs, set append=true during task creation.
+  Parameters: function_name (string, required), function_args (string, default "{}"), interval_minutes (int, required), append (bool, default false), rewrite (bool, default false), no_file (bool, default false), telegram (string, default ""). Set no_file=true to use --exec instead of --exec-out (no file output), useful with telegram for notification-only tasks. Set telegram to "true" to use the default telegram.json beside the database, or provide a custom path to telegram.json.
+  The task runs via --exec-out. By default it writes each execution result to a timestamped file in `output`; with append=true it uses --exec-out-append and appends to `<script>.txt`; with rewrite=true it uses --exec-out-rewrite and overwrites `<script>.txt` each run. rewrite takes precedence over append.
+  If the user wants a single output file reused across runs, set append=true (to accumulate) or rewrite=true (to keep only the latest result) during task creation.
   After creation, the task is immediately run once.
 - delete_scheduled_task: Deletes a scheduled task created for a script.
   On Windows, deletes `ScriptMCP\<script> (<interval>m)` via `schtasks`. On Linux/macOS, removes the cron entry tagged `# ScriptMCP:<function_name>`.
@@ -128,3 +128,10 @@ NATIVE TOOLS: In addition to the script tools above, ScriptMCP provides these bu
   Parameters: function_name (string, required), interval_minutes (int, default 1).
 These are native MCP tools — they do not appear in list_scripts and do not need inspection before use.
 Call them directly when the user asks to inspect the active database, switch databases, create a database via set_database, delete a database, schedule a script, list tasks, start or stop a task, delete a scheduled task, or read previous execution output.
+TELEGRAM NOTIFICATIONS: The CLI supports --telegram [filepath] to send script output to a Telegram channel.
+It works with any --exec* mode (--exec, --exec-out, --exec-out-append, --exec-out-rewrite) and is independent of file output.
+If no filepath is given, ScriptMCP looks for telegram.json beside the active database.
+The telegram.json file must contain botToken and chatId fields.
+Messages over 4096 characters are automatically split into chunks.
+If the config file is missing or the Telegram API fails, a warning is written to stderr but the process does not fail.
+When the user asks to send a script's output to Telegram (outside of scheduled tasks), use call_process with the telegram parameter set to "true" (for the default telegram.json beside the database) or to a custom path. This applies to any one-off execution where the user wants the result delivered to Telegram.

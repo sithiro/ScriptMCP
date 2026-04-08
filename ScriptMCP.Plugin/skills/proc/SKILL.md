@@ -18,7 +18,13 @@ Ask whether the user wants output persisted to file:
 - `output_mode: "Default"` for `--exec` (no persisted output file)
 - `output_mode: "WriteNew"` for `--exec-out` (new timestamped file per execution)
 - `output_mode: "WriteAppend"` for `--exec-out-append` (append to stable `<function>.txt`)
+- `output_mode: "WriteRewrite"` for `--exec-out-rewrite` (overwrite stable `<function>.txt` each run)
 
 If not specified, default to `Default`.
 
-Call `call_process` with the name, arguments, and chosen `output_mode`. Return the output exactly as received — do not add, remove, wrap, or modify the output in any way. If the result contains `[Output Instructions]`, follow them precisely and do not show the `[Output Instructions]` line itself.
+Ask whether the user wants the output sent to Telegram:
+- `telegram: "true"` to use the default `telegram.json` beside the active database
+- `telegram: "<path>"` to use a custom path to `telegram.json`
+- If not specified, omit the parameter (no Telegram notification).
+
+Call `call_process` with the name, arguments, chosen `output_mode`, and `telegram` if requested. Return the output exactly as received — do not add, remove, wrap, or modify the output in any way. If the result contains `[Output Instructions]`, follow them precisely and do not show the `[Output Instructions]` line itself.

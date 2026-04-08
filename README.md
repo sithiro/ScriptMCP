@@ -283,6 +283,9 @@ scriptmcp --db work.db --exec get_time
 | `--exec <name> [args]` | Execute a script and write result to stdout |
 | `--exec-out <name> [args]` | Execute and save output to a timestamped file |
 | `--exec-out-append <name> [args]` | Execute and append output to a stable file |
+| `--exec-out-rewrite <name> [args]` | Execute and overwrite a stable file each run |
+| `--path <filepath>` | Custom output filepath (requires `--exec-out`, `--exec-out-append`, or `--exec-out-rewrite`). For `--exec-out`, the timestamp is postfixed to the base filename. |
+| `--telegram [filepath]` | Send output to a Telegram channel (works with any `--exec*` mode). Optionally specify the path to `telegram.json`; defaults to `telegram.json` beside the database. |
 
 ### Data Directory
 
