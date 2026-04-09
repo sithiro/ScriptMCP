@@ -425,7 +425,7 @@ Console.Write(args.Length + "|" + args[0]);
     public void CallProcessRejectsUnknownOutputMode()
     {
         var result = _tools.CallProcess("anything", "{}", "BogusMode");
-        Assert.Equal("Error: invalid output_mode. Supported values: Default, WriteNew, WriteAppend.", result);
+        Assert.Equal("Error: invalid output_mode. Supported values: Default, WriteNew, WriteAppend, WriteRewrite.", result);
     }
 
     [Fact]
