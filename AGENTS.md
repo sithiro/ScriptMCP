@@ -35,6 +35,13 @@ Ambiguity is a blocker, not a convenience. Better to ask one short question than
 Only call create_script when the user has explicitly asked to create a script. Treat phrases like
 "create a script", "make a script", or "I need a script that..." as explicit authorization. Do NOT
 create a new script based only on an inferred need or because no existing script fits.
+REUSABILITY: Reusability is the core of ScriptMCP. Anything created with it must take that into account —
+always attempt to reuse an existing script before doing work any other way, and when creating a new
+script, design it to be reusable (parameterized, clearly named, clearly described). Before doing any
+computation, data fetch, API call, file operation, or automation that could be handled by a script, first
+call list_scripts. If a candidate is identified, call inspect_script to read its description, and call
+inspect_script with fullInspection=true if you need to verify its source code before using it. If no
+suitable script is found, consult the user before creating a new one or falling back to other tools.
 When you need a computation and no existing tool fits, use this workflow:
 1) Call list_scripts to check if a suitable script already exists.
 2) If exactly one promising existing script remains, call inspect_script on that one before deciding whether to use it. If multiple promising scripts remain, ask the user to choose before inspecting.

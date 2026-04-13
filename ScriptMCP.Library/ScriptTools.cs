@@ -146,6 +146,17 @@ public class ScriptTools
         }
     }
 
+    private static void ConfigureConnection(SqliteConnection conn)
+    {
+        using var busyCmd = conn.CreateCommand();
+        busyCmd.CommandText = "PRAGMA busy_timeout = 5000";
+        busyCmd.ExecuteNonQuery();
+
+        using var walCmd = conn.CreateCommand();
+        walCmd.CommandText = "PRAGMA journal_mode = WAL";
+        walCmd.ExecuteNonQuery();
+    }
+
     private static void EnsureDatabase()
     {
         var dir = Path.GetDirectoryName(SavePath);
@@ -154,6 +165,27 @@ public class ScriptTools
 
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
+
+        // auto_vacuum must be set before WAL mode and before any tables are created.
+        // On existing databases this is a no-op (the mode is baked in at creation time).
+        using var avCmd = conn.CreateCommand();
+        avCmd.CommandText = "PRAGMA auto_vacuum = INCREMENTAL";
+        avCmd.ExecuteNonQuery();
+
+        ConfigureConnection(conn);
+
+        // Integrity check — catch corruption early before it spreads.
+        // quick_check skips index cross-validation (faster, sufficient for startup gate).
+        using var checkCmd = conn.CreateCommand();
+        checkCmd.CommandText = "PRAGMA quick_check";
+        var checkResult = (string?)checkCmd.ExecuteScalar();
+        if (!string.Equals(checkResult, "ok", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine($"WARNING: Database integrity check failed for '{SavePath}': {checkResult}");
+            Console.Error.WriteLine("The database may be corrupted. Consider restoring from a backup or deleting and recreating it.");
+        }
+
+        using var tx = conn.BeginTransaction();
 
         // Migrate: rename old 'functions' table to 'scripts' if needed
         using var checkOld = conn.CreateCommand();
@@ -170,7 +202,6 @@ public class ScriptTools
             rename.CommandText = "ALTER TABLE functions RENAME TO scripts";
             rename.ExecuteNonQuery();
 
-            // Rename column function_type -> script_type
             using var renameCol = conn.CreateCommand();
             renameCol.CommandText = "ALTER TABLE scripts RENAME COLUMN function_type TO script_type";
             renameCol.ExecuteNonQuery();
@@ -192,92 +223,62 @@ public class ScriptTools
             );";
         cmd.ExecuteNonQuery();
 
-        // Migrate: add output_instructions column if missing (existing DBs)
+        // Read existing columns once and add any missing ones
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using var pragma = conn.CreateCommand();
         pragma.CommandText = "PRAGMA table_info(scripts)";
-        bool hasOutputInstructions = false;
         using (var reader = pragma.ExecuteReader())
         {
             while (reader.Read())
-            {
-                if (string.Equals(reader.GetString(1), "output_instructions", StringComparison.OrdinalIgnoreCase))
-                { hasOutputInstructions = true; break; }
-            }
-        }
-        if (!hasOutputInstructions)
-        {
-            using var alter = conn.CreateCommand();
-            alter.CommandText = "ALTER TABLE scripts ADD COLUMN output_instructions TEXT";
-            alter.ExecuteNonQuery();
+                existingColumns.Add(reader.GetString(1));
         }
 
-        // Migrate: add dependencies column if missing (existing DBs)
-        bool hasDependencies = false;
-        using var pragma2 = conn.CreateCommand();
-        pragma2.CommandText = "PRAGMA table_info(scripts)";
-        using (var reader2 = pragma2.ExecuteReader())
+        string[] requiredColumns = ["output_instructions", "dependencies", "code_format", "external_refs"];
+        foreach (var col in requiredColumns)
         {
-            while (reader2.Read())
+            if (!existingColumns.Contains(col))
             {
-                if (string.Equals(reader2.GetString(1), "dependencies", StringComparison.OrdinalIgnoreCase))
-                { hasDependencies = true; break; }
+                using var alter = conn.CreateCommand();
+                alter.CommandText = $"ALTER TABLE scripts ADD COLUMN {col} TEXT";
+                alter.ExecuteNonQuery();
             }
         }
-        if (!hasDependencies)
-        {
-            using var alter2 = conn.CreateCommand();
-            alter2.CommandText = "ALTER TABLE scripts ADD COLUMN dependencies TEXT";
-            alter2.ExecuteNonQuery();
-        }
 
-        bool hasCodeFormat = false;
-        using var pragma3 = conn.CreateCommand();
-        pragma3.CommandText = "PRAGMA table_info(scripts)";
-        using (var reader3 = pragma3.ExecuteReader())
-        {
-            while (reader3.Read())
-            {
-                if (string.Equals(reader3.GetString(1), "code_format", StringComparison.OrdinalIgnoreCase))
-                { hasCodeFormat = true; break; }
-            }
-        }
-        if (!hasCodeFormat)
-        {
-            using var alter3 = conn.CreateCommand();
-            alter3.CommandText = "ALTER TABLE scripts ADD COLUMN code_format TEXT";
-            alter3.ExecuteNonQuery();
-        }
+        // Check schema version. Detection logic for dependencies changed at version 1
+        // (switched from lexical name scan to Call/Proc/#load parsing), so databases
+        // at version 0 must re-scan every script to purge old false positives.
+        const int CurrentSchemaVersion = 1;
+        using var versionCmd = conn.CreateCommand();
+        versionCmd.CommandText = "PRAGMA user_version";
+        var schemaVersion = Convert.ToInt32(versionCmd.ExecuteScalar());
+        bool forceRescan = schemaVersion < 1;
 
-        // Migrate: add external_refs column if missing (existing DBs)
-        bool hasExternalRefs = false;
-        using var pragma4 = conn.CreateCommand();
-        pragma4.CommandText = "PRAGMA table_info(scripts)";
-        using (var reader4 = pragma4.ExecuteReader())
-        {
-            while (reader4.Read())
-            {
-                if (string.Equals(reader4.GetString(1), "external_refs", StringComparison.OrdinalIgnoreCase))
-                { hasExternalRefs = true; break; }
-            }
-        }
-        if (!hasExternalRefs)
-        {
-            using var alter4 = conn.CreateCommand();
-            alter4.CommandText = "ALTER TABLE scripts ADD COLUMN external_refs TEXT";
-            alter4.ExecuteNonQuery();
-        }
-
-        // Backfill: scan existing scripts that have never been scanned (dependencies IS NULL)
-        BackfillDependencies(conn);
+        BackfillDependencies(conn, forceRescan);
         MigrateLegacyCodeScripts(conn);
+
+        if (schemaVersion < CurrentSchemaVersion)
+        {
+            using var setVersion = conn.CreateCommand();
+            setVersion.CommandText = $"PRAGMA user_version = {CurrentSchemaVersion}";
+            setVersion.ExecuteNonQuery();
+        }
+
+        tx.Commit();
+
+        // Reclaim free pages left by previous deletes/updates (no-op if auto_vacuum is off).
+        using var vacuumCmd = conn.CreateCommand();
+        vacuumCmd.CommandText = "PRAGMA incremental_vacuum";
+        vacuumCmd.ExecuteNonQuery();
     }
 
-    private static void BackfillDependencies(SqliteConnection conn)
+    private static void BackfillDependencies(SqliteConnection conn, bool forceRescan = false)
     {
         var knownNames = GetScriptNames(conn);
 
         using var scanCmd = conn.CreateCommand();
-        scanCmd.CommandText = "SELECT name, parameters, script_type, body FROM scripts WHERE dependencies IS NULL";
+        scanCmd.CommandText = forceRescan
+            ? "SELECT name, parameters, script_type, body FROM scripts"
+            : "SELECT name, parameters, script_type, body FROM scripts WHERE dependencies IS NULL";
 
         var toUpdate = new List<(string name, string deps)>();
         using (var scanReader = scanCmd.ExecuteReader())
@@ -306,7 +307,9 @@ public class ScriptTools
         }
 
         if (toUpdate.Count > 0)
-            Console.Error.WriteLine($"Backfilled dependencies for {toUpdate.Count} script(s).");
+            Console.Error.WriteLine(forceRescan
+                ? $"Rescanned dependencies for {toUpdate.Count} script(s)."
+                : $"Backfilled dependencies for {toUpdate.Count} script(s).");
     }
 
     private void MigrateFromJson()
@@ -326,6 +329,7 @@ public class ScriptTools
         // Only migrate if DB is empty
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
+        ConfigureConnection(conn);
 
         using (var countCmd = conn.CreateCommand())
         {
@@ -342,6 +346,7 @@ public class ScriptTools
 
             var migrationNames = funcs.Select(f => f.Name).ToList();
 
+            using var tx = conn.BeginTransaction();
             int migrated = 0;
             foreach (var func in funcs)
             {
@@ -364,6 +369,7 @@ public class ScriptTools
                 InsertScript(conn, func, assemblyBytes);
                 migrated++;
             }
+            tx.Commit();
 
             Console.Error.WriteLine($"Migrated {migrated} script(s) from {jsonPath} to SQLite.");
 
@@ -386,6 +392,7 @@ public class ScriptTools
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
+        ConfigureConnection(conn);
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT name FROM scripts ORDER BY name";
@@ -411,6 +418,7 @@ public class ScriptTools
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
+        ConfigureConnection(conn);
 
         var dependents = FindDependentsOf(conn, name);
 
@@ -420,14 +428,19 @@ public class ScriptTools
                    "User confirmation is required before forced deletion.";
         }
 
+        using var tx = conn.BeginTransaction();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "DELETE FROM scripts WHERE name = @name";
         cmd.Parameters.AddWithValue("@name", name);
 
         var rows = cmd.ExecuteNonQuery();
         if (rows == 0)
+        {
+            tx.Rollback();
             return $"Script '{name}' not found.";
+        }
 
+        tx.Commit();
         var msg = $"Script '{name}' deleted successfully.";
         if (dependents.Count > 0)
             msg += $" Note: the following script(s) depended on it and may break: {string.Join(", ", dependents)}.";
@@ -444,6 +457,7 @@ public class ScriptTools
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
+        ConfigureConnection(conn);
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT name, description, parameters, script_type, code_format, body, compiled_assembly, output_instructions, dependencies FROM scripts WHERE name = @name";
@@ -567,18 +581,22 @@ public class ScriptTools
 
             using var conn = new SqliteConnection(ConnectionString);
             conn.Open();
+            ConfigureConnection(conn);
 
+            using var tx = conn.BeginTransaction();
             var knownNames = GetScriptNames(conn);
             var deps = ExtractDependencies(func, knownNames);
             var mutualDeps = FindDirectMutualDependencies(conn, func.Name, deps);
             if (mutualDeps.Count > 0)
             {
+                tx.Rollback();
                 return $"Creation failed: direct circular dependency detected for '{func.Name}': " +
                        $"{string.Join(", ", mutualDeps.Select(d => $"{func.Name} <-> {d}"))}.";
             }
             func.Dependencies = DependenciesToCsv(deps);
 
             InsertScript(conn, func, assemblyBytes, externalRefs);
+            tx.Commit();
 
             return $"{(IsInstructions(func) ? "Instructions" : "Code")} script '{func.Name}' created successfully " +
                    $"with {func.Parameters.Count} parameter(s).";
@@ -609,15 +627,20 @@ public class ScriptTools
             if (!File.Exists(fullPath))
                 return $"Load failed: file not found: {fullPath}";
 
-            var body = File.ReadAllText(fullPath);
-            var resolvedName = string.IsNullOrWhiteSpace(name)
-                ? Path.GetFileNameWithoutExtension(fullPath)
-                : name.Trim();
+            var rawContent = File.ReadAllText(fullPath);
+            var (headerMeta, body) = ParseScriptMetadataHeader(rawContent);
+
+            var resolvedName = !string.IsNullOrWhiteSpace(name)
+                ? name.Trim()
+                : headerMeta.TryGetValue("name", out var hName) && !string.IsNullOrWhiteSpace(hName)
+                    ? hName
+                    : Path.GetFileNameWithoutExtension(fullPath);
 
             ValidateScriptName(resolvedName);
 
             using var conn = new SqliteConnection(ConnectionString);
             conn.Open();
+            ConfigureConnection(conn);
 
             using var readCmd = conn.CreateCommand();
             readCmd.CommandText = @"
@@ -629,29 +652,42 @@ public class ScriptTools
             using var reader = readCmd.ExecuteReader();
             var exists = reader.Read();
 
+            headerMeta.TryGetValue("description", out var hDesc);
+            headerMeta.TryGetValue("parameters", out var hParams);
+            headerMeta.TryGetValue("type", out var hType);
+            headerMeta.TryGetValue("output_instructions", out var hOutput);
+
             var resolvedDescription = !string.IsNullOrWhiteSpace(description)
                 ? description
-                : exists
-                    ? reader.GetString(0)
-                    : $"Loaded from file: {fullPath}";
+                : !string.IsNullOrWhiteSpace(hDesc)
+                    ? hDesc
+                    : exists
+                        ? reader.GetString(0)
+                        : $"Loaded from file: {fullPath}";
 
             var resolvedParameters = !string.IsNullOrWhiteSpace(parameters)
                 ? parameters
-                : exists
-                    ? reader.GetString(1)
-                    : "[]";
+                : !string.IsNullOrWhiteSpace(hParams)
+                    ? hParams
+                    : exists
+                        ? reader.GetString(1)
+                        : "[]";
 
             var resolvedScriptType = !string.IsNullOrWhiteSpace(scriptType)
                 ? scriptType
-                : exists
-                    ? reader.GetString(2)
-                    : "code";
+                : !string.IsNullOrWhiteSpace(hType)
+                    ? hType
+                    : exists
+                        ? reader.GetString(2)
+                        : "code";
 
             var resolvedOutputInstructions = !string.IsNullOrWhiteSpace(outputInstructions)
                 ? outputInstructions
-                : exists && !reader.IsDBNull(3)
-                    ? reader.GetString(3)
-                    : "";
+                : !string.IsNullOrWhiteSpace(hOutput)
+                    ? hOutput
+                    : exists && !reader.IsDBNull(3)
+                        ? reader.GetString(3)
+                        : "";
 
             reader.Close();
 
@@ -692,10 +728,11 @@ public class ScriptTools
 
             using var conn = new SqliteConnection(ConnectionString);
             conn.Open();
+            ConfigureConnection(conn);
 
             using var readCmd = conn.CreateCommand();
             readCmd.CommandText = @"
-                SELECT script_type, body
+                SELECT script_type, body, description, parameters, output_instructions
                 FROM scripts
                 WHERE name = @name";
             readCmd.Parameters.AddWithValue("@name", name);
@@ -706,11 +743,29 @@ public class ScriptTools
 
             var scriptType = reader.GetString(0);
             var body = reader.GetString(1);
+            var description = reader.IsDBNull(2) ? "" : reader.GetString(2);
+            var parameters = reader.IsDBNull(3) ? "[]" : reader.GetString(3);
+            var outputInstructions = reader.IsDBNull(4) ? "" : reader.GetString(4);
             reader.Close();
 
-            var extension = string.Equals(scriptType, "instructions", StringComparison.OrdinalIgnoreCase)
-                ? ".txt"
-                : ".cs";
+            var isCode = !string.Equals(scriptType, "instructions", StringComparison.OrdinalIgnoreCase);
+            var extension = isCode ? ".cs" : ".txt";
+            var prefix = isCode ? "// " : "";
+
+            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            var versionStr = version != null ? version.ToString() : "0.0.0";
+
+            var header = new StringBuilder();
+            header.AppendLine($"{prefix}@scriptmcp version: {versionStr}");
+            header.AppendLine($"{prefix}@scriptmcp name: {name}");
+            header.AppendLine($"{prefix}@scriptmcp description: {description}");
+            header.AppendLine($"{prefix}@scriptmcp type: {scriptType}");
+            header.AppendLine($"{prefix}@scriptmcp parameters: {parameters}");
+            if (!string.IsNullOrWhiteSpace(outputInstructions))
+                header.AppendLine($"{prefix}@scriptmcp output_instructions: {outputInstructions}");
+            header.AppendLine();
+
+            var content = header.ToString() + body;
 
             var resolvedPath = string.IsNullOrWhiteSpace(path)
                 ? Path.Combine(Directory.GetCurrentDirectory(), name + extension)
@@ -720,7 +775,7 @@ public class ScriptTools
             if (!string.IsNullOrWhiteSpace(resolvedDirectory))
                 Directory.CreateDirectory(resolvedDirectory);
 
-            File.WriteAllText(resolvedPath, body, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            File.WriteAllText(resolvedPath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             return $"Script '{name}' exported to '{resolvedPath}'.";
         }
         catch (Exception ex)
@@ -740,6 +795,7 @@ public class ScriptTools
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
+        ConfigureConnection(conn);
 
         using var readCmd = conn.CreateCommand();
         readCmd.CommandText = @"
@@ -950,6 +1006,7 @@ public class ScriptTools
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
+        ConfigureConnection(conn);
 
         using var readCmd = conn.CreateCommand();
         readCmd.CommandText = "SELECT parameters, script_type, body FROM scripts WHERE name = @name";
@@ -990,6 +1047,7 @@ public class ScriptTools
         if (!string.IsNullOrWhiteSpace(resolvedDirectory))
             Directory.CreateDirectory(resolvedDirectory);
 
+        using var tx = conn.BeginTransaction();
         using var updateCmd = conn.CreateCommand();
         updateCmd.CommandText = "UPDATE scripts SET compiled_assembly = @asm, code_format = @code_format, external_refs = @external_refs WHERE name = @name";
         updateCmd.Parameters.AddWithValue("@name", name);
@@ -1000,6 +1058,7 @@ public class ScriptTools
                 ? JsonSerializer.Serialize(compiled.ExternalReferencePaths)
                 : (object)DBNull.Value);
         updateCmd.ExecuteNonQuery();
+        tx.Commit();
 
         File.WriteAllBytes(resolvedPath, compiled.Bytes);
         return $"Script '{name}' compiled and exported to '{resolvedPath}'.";
@@ -1015,6 +1074,7 @@ public class ScriptTools
     {
         using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
+        ConfigureConnection(conn);
 
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT name, description, parameters, script_type, body, compiled_assembly, output_instructions, external_refs FROM scripts WHERE name = @name";
@@ -2728,31 +2788,108 @@ public class ScriptTools
         return names;
     }
 
+    private static readonly Regex ScriptMetadataLineRegex = new(
+        @"^(?://\s*)?@scriptmcp\s+(version|name|description|type|parameters|output_instructions):\s*(.+)$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static (Dictionary<string, string> metadata, string body) ParseScriptMetadataHeader(string content)
+    {
+        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var lines = content.Split('\n');
+        int bodyStart = 0;
+        bool foundAny = false;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimEnd('\r').Trim();
+
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                if (foundAny)
+                {
+                    bodyStart = i + 1;
+                    break;
+                }
+                continue;
+            }
+
+            var match = ScriptMetadataLineRegex.Match(trimmed);
+            if (match.Success)
+            {
+                foundAny = true;
+                var key = match.Groups[1].Value.ToLowerInvariant();
+                var value = match.Groups[2].Value.Trim();
+                metadata[key] = value;
+                bodyStart = i + 1;
+            }
+            else if (!foundAny)
+            {
+                break;
+            }
+            else
+            {
+                bodyStart = i;
+                break;
+            }
+        }
+
+        var body = bodyStart < lines.Length
+            ? string.Join("\n", lines.Skip(bodyStart))
+            : "";
+
+        return (metadata, body);
+    }
+
+    private static readonly Regex CallProcInvocationRegex = new(
+        @"ScriptMCP\s*\.\s*(?:Call|Proc)\s*\(\s*""([^""]+)""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex LoadDirectiveDependencyRegex = new(
+        @"#\s*load\s+""([^""]+)""",
+        RegexOptions.Compiled);
+
     private static List<string> ExtractDependencies(Script func, IReadOnlyList<string>? knownFunctions = null)
     {
-        if (string.IsNullOrWhiteSpace(func.Body))
+        if (string.IsNullOrWhiteSpace(func.Body) || knownFunctions == null || knownFunctions.Count == 0)
             return new List<string>();
 
+        // Build a case-insensitive lookup that preserves canonical casing from the database
+        var canonicalByName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in knownFunctions)
+            canonicalByName[name] = name;
+
         var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var body = func.Body;
 
-        // Scan body for known function names (works for both code and instructions)
-        if (knownFunctions != null)
+        // 1. Detect ScriptMCP.Call("name", ...) and ScriptMCP.Proc("name", ...) invocations
+        foreach (Match m in CallProcInvocationRegex.Matches(body))
         {
-            var body = func.Body;
-            foreach (var name in knownFunctions)
-            {
-                // Skip self-reference
-                if (string.Equals(name, func.Name, StringComparison.OrdinalIgnoreCase))
-                    continue;
+            var name = m.Groups[1].Value;
+            if (string.Equals(name, func.Name, StringComparison.OrdinalIgnoreCase))
+                continue; // skip self-reference
+            if (canonicalByName.TryGetValue(name, out var canonical))
+                found.Add(canonical);
+        }
 
-                // Fast contains check before expensive regex
-                if (body.Contains(name, StringComparison.OrdinalIgnoreCase))
-                {
-                    // Word boundary check to avoid partial matches (e.g. "get_time" in "get_time_string")
-                    if (Regex.IsMatch(body, @"(?<![A-Za-z0-9_-])" + Regex.Escape(name) + @"(?![A-Za-z0-9_-])", RegexOptions.IgnoreCase))
-                        found.Add(name);
-                }
+        // 2. Detect #load "path.cs" directives where the basename matches a known script
+        foreach (Match m in LoadDirectiveDependencyRegex.Matches(body))
+        {
+            var path = m.Groups[1].Value;
+            string baseName;
+            try
+            {
+                baseName = Path.GetFileNameWithoutExtension(path);
             }
+            catch
+            {
+                continue; // malformed path — skip
+            }
+            if (string.IsNullOrEmpty(baseName))
+                continue;
+            if (string.Equals(baseName, func.Name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (canonicalByName.TryGetValue(baseName, out var canonical))
+                found.Add(canonical);
         }
 
         return found

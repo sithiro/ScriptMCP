@@ -255,7 +255,13 @@ Console.Write(args.Length + "|" + args[0]);
         var result = _tools.ExportScript(name, exportPath);
         Assert.Contains("exported to", result, StringComparison.OrdinalIgnoreCase);
         Assert.True(File.Exists(exportPath));
-        Assert.Equal("Console.Write(\"exported\");", File.ReadAllText(exportPath));
+
+        var content = File.ReadAllText(exportPath);
+        Assert.Contains("@scriptmcp name: " + name, content, StringComparison.Ordinal);
+        Assert.Contains("@scriptmcp description: Export me.", content, StringComparison.Ordinal);
+        Assert.Contains("@scriptmcp type: code", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("@scriptmcp version:", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Console.Write(\"exported\");", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -280,7 +286,12 @@ Console.Write(args.Length + "|" + args[0]);
 
             Assert.Contains("exported to", result, StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(exportPath));
-            Assert.Equal("Do the thing.", File.ReadAllText(exportPath));
+
+            var content = File.ReadAllText(exportPath);
+            Assert.Contains("@scriptmcp name: " + name, content, StringComparison.Ordinal);
+            Assert.Contains("@scriptmcp type: instructions", content, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Do the thing.", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("//", content, StringComparison.Ordinal);
         }
         finally
         {
@@ -386,6 +397,112 @@ Console.Write(args.Length + "|" + args[0]);
 
         var inspect = _tools.InspectScript(second);
         Assert.Contains("Depends on:  (none)", inspect, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DependencyDetectedForScriptMcpCall()
+    {
+        var target = UniqueName("test_dep_target_call");
+        var caller = UniqueName("test_dep_caller_call");
+
+        _tools.CreateScript(target, "target", "[]", "Console.Write(\"ok\");", "code", "");
+        _tools.CreateScript(
+            caller,
+            "caller",
+            "[]",
+            $$"""Console.Write(ScriptMCP.Call("{{target}}", "{}"));""",
+            "code",
+            "");
+
+        var inspect = _tools.InspectScript(caller);
+        Assert.Contains($"Depends on:  {target}", inspect, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DependencyDetectedForScriptMcpProc()
+    {
+        var target = UniqueName("test_dep_target_proc");
+        var caller = UniqueName("test_dep_caller_proc");
+
+        _tools.CreateScript(target, "target", "[]", "Console.Write(\"ok\");", "code", "");
+        _tools.CreateScript(
+            caller,
+            "caller",
+            "[]",
+            $$"""var p = ScriptMCP.Proc("{{target}}", "{}"); p.WaitForExit(); Console.Write(p.StandardOutput.ReadToEnd());""",
+            "code",
+            "");
+
+        var inspect = _tools.InspectScript(caller);
+        Assert.Contains($"Depends on:  {target}", inspect, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DependencyNotDetectedForMereNameMentionInComment()
+    {
+        var target = UniqueName("test_dep_target_comment");
+        var caller = UniqueName("test_dep_caller_comment");
+
+        _tools.CreateScript(target, "target", "[]", "Console.Write(\"ok\");", "code", "");
+        _tools.CreateScript(
+            caller,
+            "caller",
+            "[]",
+            $"// This script is similar to {target} but does its own thing\nConsole.Write(\"hello\");",
+            "code",
+            "");
+
+        var inspect = _tools.InspectScript(caller);
+        Assert.Contains("Depends on:  (none)", inspect, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DependencyNotDetectedForMereNameMentionInStringLiteral()
+    {
+        var target = UniqueName("test_dep_target_string");
+        var caller = UniqueName("test_dep_caller_string");
+
+        _tools.CreateScript(target, "target", "[]", "Console.Write(\"ok\");", "code", "");
+        _tools.CreateScript(
+            caller,
+            "caller",
+            "[]",
+            $"Console.Write(\"See {target} for reference\");",
+            "code",
+            "");
+
+        var inspect = _tools.InspectScript(caller);
+        Assert.Contains("Depends on:  (none)", inspect, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DependencyDetectedForLoadDirectiveMatchingKnownScriptBasename()
+    {
+        var target = UniqueName("test_dep_target_load");
+        var caller = UniqueName("test_dep_caller_load");
+
+        _tools.CreateScript(target, "target", "[]", "Console.Write(\"ok\");", "code", "");
+
+        // Write a file whose basename matches the target script name so #load resolves at compile time.
+        var loadFile = Path.Combine(Path.GetTempPath(), $"{target}.cs");
+        File.WriteAllText(loadFile, "// placeholder\n");
+        try
+        {
+            _tools.CreateScript(
+                caller,
+                "caller",
+                "[]",
+                $"#load \"{loadFile.Replace("\\", "\\\\")}\"\nConsole.Write(\"hello\");",
+                "code",
+                "");
+
+            var inspect = _tools.InspectScript(caller);
+            Assert.Contains($"Depends on:  {target}", inspect, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(loadFile)) File.Delete(loadFile);
+        }
     }
 
     [Fact]
@@ -930,5 +1047,262 @@ Console.Write(args.Length + "|" + args[0]);
 
         var callResult = _tools.CallScript(name);
         Assert.Equal("Hello from DLL, CRLF!", callResult);
+    }
+
+    // ── Export/Load metadata round-trip tests ────────────────────────────────
+
+    [Fact]
+    public void ExportScriptIncludesMetadataHeader()
+    {
+        var name = UniqueName("test_export_meta");
+        var exportPath = Path.Combine(_fixture.TestDataDirectory, $"{name}.cs");
+
+        Assert.Contains("created successfully", _tools.CreateScript(
+            name: name,
+            description: "A test script with metadata",
+            parameters: """[{"name":"x","type":"int","description":"value"}]""",
+            body: "Console.Write(x);",
+            functionType: "code",
+            outputInstructions: "return exactly"), StringComparison.OrdinalIgnoreCase);
+
+        _tools.ExportScript(name, exportPath);
+        var content = File.ReadAllText(exportPath);
+
+        Assert.Contains("// @scriptmcp version:", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("// @scriptmcp name: " + name, content, StringComparison.Ordinal);
+        Assert.Contains("// @scriptmcp description: A test script with metadata", content, StringComparison.Ordinal);
+        Assert.Contains("// @scriptmcp type: code", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("// @scriptmcp parameters:", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("// @scriptmcp output_instructions: return exactly", content, StringComparison.Ordinal);
+        Assert.Contains("Console.Write(x);", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadScriptParsesMetadataHeaderFromExportedFile()
+    {
+        var originalName = UniqueName("test_roundtrip_orig");
+        var exportPath = Path.Combine(_fixture.TestDataDirectory, $"{originalName}.cs");
+
+        Assert.Contains("created successfully", _tools.CreateScript(
+            name: originalName,
+            description: "Round-trip description",
+            parameters: """[{"name":"msg","type":"string","description":"message"}]""",
+            body: "Console.Write(msg);",
+            functionType: "code",
+            outputInstructions: "return exactly"), StringComparison.OrdinalIgnoreCase);
+
+        _tools.ExportScript(originalName, exportPath);
+        _tools.DeleteScript(originalName, forced: true);
+
+        var loadedName = UniqueName("test_roundtrip_loaded");
+        var result = _tools.LoadScript(exportPath, name: loadedName);
+        Assert.Contains("created", result, StringComparison.OrdinalIgnoreCase);
+
+        var inspection = _tools.InspectScript(loadedName);
+        Assert.Contains("Round-trip description", inspection, StringComparison.Ordinal);
+        Assert.Contains("msg (string): message", inspection, StringComparison.Ordinal);
+        Assert.Contains("Output Instructions: return exactly", inspection, StringComparison.Ordinal);
+
+        var callResult = _tools.CallScript(loadedName, """{"msg":"hello"}""");
+        Assert.StartsWith("hello", callResult);
+    }
+
+    [Fact]
+    public void LoadScriptUsesHeaderNameWhenNoNameParameterProvided()
+    {
+        var headerName = UniqueName("test_header_name");
+        var sourcePath = Path.Combine(_fixture.TestDataDirectory, "arbitrary_filename.cs");
+
+        var fileContent = $"""
+            // @scriptmcp name: {headerName}
+            // @scriptmcp description: Created from header name
+            // @scriptmcp type: code
+            // @scriptmcp parameters: []
+
+            Console.Write("from-header");
+            """;
+        File.WriteAllText(sourcePath, fileContent);
+
+        var result = _tools.LoadScript(sourcePath);
+        Assert.Contains("created", result, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(headerName, result, StringComparison.Ordinal);
+
+        var callResult = _tools.CallScript(headerName, "{}");
+        Assert.Equal("from-header", callResult);
+    }
+
+    [Fact]
+    public void LoadScriptExplicitParamsOverrideHeader()
+    {
+        var name = UniqueName("test_override");
+        var sourcePath = Path.Combine(_fixture.TestDataDirectory, $"{name}.cs");
+
+        var fileContent = $"""
+            // @scriptmcp name: {name}
+            // @scriptmcp description: Header description
+            // @scriptmcp type: code
+            // @scriptmcp parameters: []
+
+            Console.Write("override-test");
+            """;
+        File.WriteAllText(sourcePath, fileContent);
+
+        var result = _tools.LoadScript(sourcePath, name: name, description: "Explicit description");
+        Assert.Contains("created", result, StringComparison.OrdinalIgnoreCase);
+
+        var inspection = _tools.InspectScript(name);
+        Assert.Contains("Explicit description", inspection, StringComparison.Ordinal);
+        Assert.DoesNotContain("Header description", inspection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadScriptWithoutHeaderWorksAsPlainBody()
+    {
+        var name = UniqueName("test_no_header");
+        var sourcePath = Path.Combine(_fixture.TestDataDirectory, $"{name}.cs");
+        File.WriteAllText(sourcePath, "Console.Write(\"plain\");");
+
+        var result = _tools.LoadScript(sourcePath, name: name);
+        Assert.Contains("created", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(name, "{}");
+        Assert.Equal("plain", callResult);
+    }
+
+    [Fact]
+    public void InstructionsScriptRoundTripsWithoutCommentPrefix()
+    {
+        var name = UniqueName("test_instr_roundtrip");
+        var exportPath = Path.Combine(_fixture.TestDataDirectory, $"{name}.txt");
+
+        Assert.Contains("created successfully", _tools.CreateScript(
+            name: name,
+            description: "Instruction round-trip",
+            parameters: "[]",
+            body: "Follow these steps carefully.",
+            functionType: "instructions",
+            outputInstructions: ""), StringComparison.OrdinalIgnoreCase);
+
+        _tools.ExportScript(name, exportPath);
+        var content = File.ReadAllText(exportPath);
+
+        Assert.Contains("@scriptmcp name: " + name, content, StringComparison.Ordinal);
+        Assert.DoesNotContain("//", content, StringComparison.Ordinal);
+
+        _tools.DeleteScript(name, forced: true);
+
+        var result = _tools.LoadScript(exportPath);
+        Assert.Contains("created", result, StringComparison.OrdinalIgnoreCase);
+
+        var inspection = _tools.InspectScript(name);
+        Assert.Contains("Instruction round-trip", inspection, StringComparison.Ordinal);
+        Assert.Contains("Type:        instructions", inspection, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadScriptPreservesBodyWithScriptmcpMentionInCode()
+    {
+        var name = UniqueName("test_false_header");
+        var sourcePath = Path.Combine(_fixture.TestDataDirectory, $"{name}.cs");
+
+        // A comment that mentions @scriptmcp but is not a valid header key — must not be stripped
+        File.WriteAllText(sourcePath, """
+            // @scriptmcp was created by Bill
+            Console.Write("safe");
+            """);
+
+        var result = _tools.LoadScript(sourcePath, name: name);
+        Assert.Contains("created", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(name, "{}");
+        Assert.Equal("safe", callResult);
+    }
+
+    [Fact]
+    public void LoadScriptHandlesEmptyFile()
+    {
+        var name = UniqueName("test_empty_file");
+        var sourcePath = Path.Combine(_fixture.TestDataDirectory, $"{name}.txt");
+        File.WriteAllText(sourcePath, "");
+
+        var result = _tools.LoadScript(sourcePath, name: name, scriptType: "instructions");
+        Assert.Contains("created", result, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LoadScriptHandlesLeadingBlankLinesBeforeCode()
+    {
+        var name = UniqueName("test_leading_blanks");
+        var sourcePath = Path.Combine(_fixture.TestDataDirectory, $"{name}.cs");
+        File.WriteAllText(sourcePath, "\n\n\nConsole.Write(\"blanks\");");
+
+        var result = _tools.LoadScript(sourcePath, name: name);
+        Assert.Contains("created", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(name, "{}");
+        Assert.Equal("blanks", callResult);
+    }
+
+    [Fact]
+    public void LoadScriptHandlesHeaderWithNoBlankLineSeparator()
+    {
+        var name = UniqueName("test_no_blank_sep");
+        var sourcePath = Path.Combine(_fixture.TestDataDirectory, $"{name}.cs");
+
+        File.WriteAllText(sourcePath, $"""
+            // @scriptmcp name: {name}
+            // @scriptmcp description: No blank separator
+            // @scriptmcp type: code
+            // @scriptmcp parameters: []
+            Console.Write("no-sep");
+            """);
+
+        var result = _tools.LoadScript(sourcePath, name: name);
+        Assert.Contains("created", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(name, "{}");
+        Assert.Equal("no-sep", callResult);
+
+        var inspection = _tools.InspectScript(name);
+        Assert.Contains("No blank separator", inspection, StringComparison.Ordinal);
+    }
+
+    // ── SQLite pragma verification tests ─────────────────────────────────────
+
+    [Fact]
+    public void FreshDatabaseHasWalModeAndAutoVacuumIncremental()
+    {
+        var tempDir = Path.Combine(_fixture.TestDataDirectory, "pragma_test");
+        Directory.CreateDirectory(tempDir);
+        var dbPath = Path.Combine(tempDir, "pragma_verify.db");
+
+        // Ensure the DB does not exist
+        if (File.Exists(dbPath)) File.Delete(dbPath);
+
+        var originalPath = ScriptTools.SavePath;
+        try
+        {
+            // Point ScriptTools at the fresh DB — EnsureDatabase will create it
+            _tools.SetDatabase(dbPath, create: true);
+
+            // Now open a raw connection and check stored pragmas
+            using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+            conn.Open();
+
+            string GetPragma(string name)
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"PRAGMA {name}";
+                return cmd.ExecuteScalar()?.ToString() ?? "(null)";
+            }
+
+            Assert.Equal("wal", GetPragma("journal_mode"));
+            Assert.Equal("2", GetPragma("auto_vacuum")); // 2 = INCREMENTAL
+            Assert.Equal("ok", GetPragma("quick_check"));
+        }
+        finally
+        {
+            RestoreAndDeleteDatabase(originalPath, dbPath);
+        }
     }
 }

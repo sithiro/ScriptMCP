@@ -15,6 +15,21 @@ version: 1.0.0
 
 Provide guidance for creating, managing, and executing scripts through the ScriptMCP MCP server. ScriptMCP enables creating C# compiled scripts and plain-English instruction scripts on the fly, persisted in SQLite for reuse across sessions.
 
+## Reusability (Core Principle)
+
+Reusability is the core of ScriptMCP. Any work performed through it must take that into account — always attempt to reuse an existing script before doing the work any other way, and when creating a new script, design it to be reusable.
+
+Before doing any computation, data fetch, API call, file operation, or automation that a script could handle, follow this sequence:
+
+1. **List**: call `list_scripts` to see what already exists.
+2. **Identify candidates**: scan names for plausible matches to the user's request.
+3. **Inspect description**: call `inspect_script` on the best candidate to read its description and parameters.
+4. **Inspect source if needed**: if the description is ambiguous or you need to verify behavior, call `inspect_script` with `fullInspection: true` to read the actual source code.
+5. **If a suitable script exists**: use it via `call_script` (or `call_process` for subprocess execution). Do not fall back to web search, Bash, or other tools.
+6. **If nothing fits**: consult the user before creating a new script. When you do create one, parameterize inputs, name it clearly, and write a description that will let it be recognized and reused by future requests.
+
+Do not silently pick between multiple plausible candidates — ask the user which one. Do not create duplicates of existing functionality.
+
 ## Tool Overview
 
 ScriptMCP exposes these MCP tools:
