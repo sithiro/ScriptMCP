@@ -71,6 +71,7 @@ IMPORTANT: Preserving tokens is your top priority when returning script results.
 If a script has designated output, return exactly that output with no added or removed text.
 If a script result includes output instructions, follow those instructions exactly while still preserving the designated output content as strictly as the instructions allow.
 Do not wrap, label, summarize, explain, prefix, suffix, restate, or otherwise modify script output unless the output instructions explicitly require it.
+TOKEN BUDGET: Before performing any action, stop and estimate the token cost. If you expect the action to exceed 1K tokens, describe what you intend to do and ask the user to confirm before proceeding.
 SCRIPTING ENVIRONMENT: Target .NET 9 and C# 13.
 For code scripts, write top-level C# source, like a Program.cs file.
 Support both inferred top-level statements and the classic `Program.Main(string[] args)` structure when useful.
@@ -80,11 +81,16 @@ The following usings are auto-included: System, System.Collections.Generic, Syst
 System.Linq, System.Net, System.Net.Http, System.Text, System.Text.RegularExpressions, System.Threading.Tasks.
 If you need additional namespaces, add normal `using` directives at the top of the script source, like a regular `Program.cs` file.
 Available assembly references: all System.*.dll from the .NET 9 runtime directory.
-NOT available: NuGet packages or assemblies outside the runtime (e.g. System.Management, Newtonsoft.Json).
+NOT available: NuGet packages (ScriptMCP is self-contained, no .NET SDK dependency).
 Use System.Text.Json for JSON. Use System.Net.Http.HttpClient for HTTP. Use System.Diagnostics.Process for shell commands.
+DIRECTIVES: Scripts support `#r "path.dll"` to reference external .NET assemblies and `#load "path.cs"` to include C# source files.
+Directives must appear at the top of the script body before any code. Both absolute and relative paths are supported.
+`#load` files become separate compilation units — code must be in classes/structs, not bare top-level statements.
+Loaded files can contain nested `#r` and `#load` directives (max depth 10, circular references detected).
+`#r "nuget: ..."` is not supported.
 The generated entry point is not async-friendly by default — use .Result or .GetAwaiter().GetResult() for async calls.
 Supported parameter types: string (default), int, long, double, float, bool.
-Parameters are auto-parsed from that JSON payload and exposed as typed names in your code.
+Parameters are auto-parsed from that JSON payload and exposed as typed parameter names in your code.
 `scriptArgs` remains available as a compatibility dictionary parsed from the same `args[0]` JSON.
 INTER-SCRIPT CALLS: Two helpers are available inside code scripts to call other scripts.
 ScriptMCP.Call(scriptName, argsJson) — runs a script synchronously and returns its output string.

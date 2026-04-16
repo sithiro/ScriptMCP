@@ -695,7 +695,7 @@ public class ScriptTools
                 name: resolvedName,
                 description: resolvedDescription,
                 parameters: resolvedParameters,
-                body: body,
+                body: rawContent,
                 functionType: resolvedScriptType,
                 outputInstructions: resolvedOutputInstructions);
 
@@ -752,20 +752,31 @@ public class ScriptTools
             var extension = isCode ? ".cs" : ".txt";
             var prefix = isCode ? "// " : "";
 
-            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-            var versionStr = version != null ? version.ToString() : "0.0.0";
+            bool bodyHasMetadata = body.Split('\n')
+                .Any(l => ScriptMetadataLineRegex.IsMatch(l.TrimEnd('\r').Trim()));
 
-            var header = new StringBuilder();
-            header.AppendLine($"{prefix}@scriptmcp version: {versionStr}");
-            header.AppendLine($"{prefix}@scriptmcp name: {name}");
-            header.AppendLine($"{prefix}@scriptmcp description: {description}");
-            header.AppendLine($"{prefix}@scriptmcp type: {scriptType}");
-            header.AppendLine($"{prefix}@scriptmcp parameters: {parameters}");
-            if (!string.IsNullOrWhiteSpace(outputInstructions))
-                header.AppendLine($"{prefix}@scriptmcp output_instructions: {outputInstructions}");
-            header.AppendLine();
+            string content;
+            if (bodyHasMetadata)
+            {
+                content = body;
+            }
+            else
+            {
+                var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+                var versionStr = version != null ? version.ToString() : "0.0.0";
 
-            var content = header.ToString() + body;
+                var metaHeader = new StringBuilder();
+                metaHeader.AppendLine($"{prefix}@scriptmcp version: {versionStr}");
+                metaHeader.AppendLine($"{prefix}@scriptmcp name: {name}");
+                metaHeader.AppendLine($"{prefix}@scriptmcp description: {description}");
+                metaHeader.AppendLine($"{prefix}@scriptmcp type: {scriptType}");
+                metaHeader.AppendLine($"{prefix}@scriptmcp parameters: {parameters}");
+                if (!string.IsNullOrWhiteSpace(outputInstructions))
+                    metaHeader.AppendLine($"{prefix}@scriptmcp output_instructions: {outputInstructions}");
+                metaHeader.AppendLine();
+
+                content = metaHeader.ToString() + body;
+            }
 
             var resolvedPath = string.IsNullOrWhiteSpace(path)
                 ? Path.Combine(Directory.GetCurrentDirectory(), name + extension)
@@ -1985,13 +1996,27 @@ public class ScriptTools
                 ? Path.GetFullPath(loadPath)
                 : Path.GetFullPath(Path.Combine(baseDir, loadPath));
 
-            if (!File.Exists(resolvedPath))
-                return (trees, dllRefs, $"#load directive error: file not found: '{resolvedPath}'");
+            string content;
+            bool fromDatabase = false;
+
+            if (File.Exists(resolvedPath))
+            {
+                content = File.ReadAllText(resolvedPath);
+            }
+            else
+            {
+                // Fall back to database: strip .cs extension from filename and look up by script name
+                var fileName = Path.GetFileNameWithoutExtension(resolvedPath);
+                var dbBody = LoadScriptBodyFromDatabase(fileName);
+                if (dbBody == null)
+                    return (trees, dllRefs, $"#load directive error: file not found: '{resolvedPath}' (also not found as script '{fileName}' in database)");
+                content = dbBody;
+                fromDatabase = true;
+            }
 
             if (!visited.Add(resolvedPath))
                 return (trees, dllRefs, $"#load directive error: circular reference detected: '{resolvedPath}'");
 
-            var content = File.ReadAllText(resolvedPath);
             var nested = PreprocessDirectives(content);
 
             if (nested.Error != null)
@@ -2002,7 +2027,7 @@ public class ScriptTools
             // Recursively resolve nested #load directives
             if (nested.LoadPaths.Count > 0)
             {
-                var loadDir = Path.GetDirectoryName(resolvedPath) ?? baseDir;
+                var loadDir = fromDatabase ? baseDir : (Path.GetDirectoryName(resolvedPath) ?? baseDir);
                 var (nestedTrees, nestedDlls, nestedError) =
                     ResolveLoadFiles(nested.LoadPaths, loadDir, visited, depth + 1);
 
@@ -2017,6 +2042,27 @@ public class ScriptTools
         }
 
         return (trees, dllRefs, null);
+    }
+
+    /// <summary>
+    /// Attempts to load a script body from the database by name.
+    /// Returns null if the script does not exist.
+    /// </summary>
+    private static string? LoadScriptBodyFromDatabase(string scriptName)
+    {
+        try
+        {
+            using var conn = new SqliteConnection($"Data Source={SavePath}");
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT body FROM scripts WHERE name = @name";
+            cmd.Parameters.AddWithValue("@name", scriptName);
+            return cmd.ExecuteScalar() as string;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>

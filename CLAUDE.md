@@ -71,6 +71,7 @@ IMPORTANT: Preserving tokens is your top priority when returning script results.
 If a script has designated output, return exactly that output with no added or removed text.
 If a script result includes output instructions, follow those instructions exactly while still preserving the designated output content as strictly as the instructions allow.
 Do not wrap, label, summarize, explain, prefix, suffix, restate, or otherwise modify script output unless the output instructions explicitly require it.
+TOKEN BUDGET: Before performing any action, stop and estimate the token cost. If you expect the action to exceed 1K tokens, describe what you intend to do and ask the user to confirm before proceeding.
 SCRIPTING ENVIRONMENT: Target .NET 9 and C# 13.
 For code scripts, write top-level C# source, like a Program.cs file.
 Support both inferred top-level statements and the classic `Program.Main(string[] args)` structure when useful.
