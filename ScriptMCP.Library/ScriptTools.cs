@@ -94,23 +94,6 @@ public class ScriptTools
         psi.ArgumentList.Add(SavePath);
     }
 
-    private static string ResolveOptionalDatabasePath(string database)
-    {
-        if (string.IsNullOrWhiteSpace(database))
-            return SavePath;
-
-        var trimmed = database.Trim();
-        if (!trimmed.Contains(Path.DirectorySeparatorChar) &&
-            !trimmed.Contains(Path.AltDirectorySeparatorChar))
-        {
-            if (!trimmed.EndsWith(".db", StringComparison.OrdinalIgnoreCase))
-                trimmed += ".db";
-            return Path.Combine(McpConstants.GetDefaultDatabaseDirectory(), trimmed);
-        }
-
-        return Path.GetFullPath(trimmed);
-    }
-
     private static string BuildDatabaseArgumentForShell()
     {
         return $" {McpConstants.DatabaseArgumentName} \"{SavePath.Replace("\"", "\\\"")}\"";
@@ -733,10 +716,10 @@ public class ScriptTools
     }
 
     [McpServerTool(Name = "export_script")]
-    [Description("Exports a stored script to a local file. By default it writes to <name>.csx for code scripts and <name>.txt for instructions scripts.")]
+    [Description("Exports a stored script to a local file. By default it writes to <name>.cs for code scripts and <name>.txt for instructions scripts.")]
     public string ExportScript(
         [Description("The name of the script to export")] string name,
-        [Description("Optional destination path. Defaults to <name>.csx for code scripts or <name>.txt for instructions scripts in the current working directory.")] string path = "")
+        [Description("Optional destination path. Defaults to <name>.cs for code scripts or <name>.txt for instructions scripts in the current working directory.")] string path = "")
     {
         try
         {
@@ -766,7 +749,7 @@ public class ScriptTools
             reader.Close();
 
             var isCode = !string.Equals(scriptType, "instructions", StringComparison.OrdinalIgnoreCase);
-            var extension = isCode ? ".csx" : ".txt";
+            var extension = isCode ? ".cs" : ".txt";
             var prefix = isCode ? "// " : "";
 
             bool bodyHasMetadata = body.Split('\n')
@@ -1098,11 +1081,9 @@ public class ScriptTools
     [Description("Calls a previously registered script with the given arguments")]
     public string CallScript(
         [Description("The name of the script to call")] string name,
-        [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}",
-        [Description("Optional path or name of a ScriptMCP database to call the script from. If omitted, uses the active database.")] string database = "")
+        [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}")
     {
-        var dbPath = ResolveOptionalDatabasePath(database);
-        using var conn = new SqliteConnection($"Data Source={dbPath}");
+        using var conn = new SqliteConnection(ConnectionString);
         conn.Open();
         ConfigureConnection(conn);
 
@@ -1156,8 +1137,7 @@ public class ScriptTools
         [Description("The name of the script to call")] string name,
         [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}",
         [Description("Output mode: Default (uses --exec, no persisted output file), WriteNew (uses --exec-out, writes a new file per execution), WriteAppend (uses --exec-out-append, appends to one stable file), WriteRewrite (uses --exec-out-rewrite, overwrites one stable file each run)")] string output_mode = "Default",
-        [Description("When true, send the script output to a Telegram channel using telegram.json beside the database. Or provide a custom path to telegram.json.")] string telegram = "",
-        [Description("Optional path or name of a ScriptMCP database to call the script from. If omitted, uses the active database.")] string database = "")
+        [Description("When true, send the script output to a Telegram channel using telegram.json beside the database. Or provide a custom path to telegram.json.")] string telegram = "")
     {
         var exePath = Environment.ProcessPath;
         if (string.IsNullOrEmpty(exePath))
@@ -1174,8 +1154,6 @@ public class ScriptTools
             _ => "--exec"
         };
 
-        var dbPath = ResolveOptionalDatabasePath(database);
-
         try
         {
             var psi = new System.Diagnostics.ProcessStartInfo
@@ -1189,8 +1167,7 @@ public class ScriptTools
                 StandardErrorEncoding = System.Text.Encoding.UTF8,
                 CreateNoWindow = true,
             };
-            psi.ArgumentList.Add(McpConstants.DatabaseArgumentName);
-            psi.ArgumentList.Add(dbPath);
+            AppendDatabaseArgumentFromCurrentProcess(psi);
             psi.ArgumentList.Add(execFlag);
             psi.ArgumentList.Add(name);
             psi.ArgumentList.Add(arguments);
