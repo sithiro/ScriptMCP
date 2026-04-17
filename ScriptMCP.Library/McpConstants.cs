@@ -95,10 +95,11 @@ public static class McpConstants
         "The following usings are auto-included: System, System.Collections.Generic, System.Globalization, System.IO, " +
         "System.Linq, System.Net, System.Net.Http, System.Text, System.Text.RegularExpressions, System.Threading.Tasks. " +
         "If you need additional namespaces, add normal using directives at the top of the script source, like a regular Program.cs file. " +
+        "For disposable resources, prefer the classic using (var x = ...) { ... } statement instead of using var x = ...;. " +
         "Available assembly references: all System.*.dll from the .NET 9 runtime directory. " +
         "NOT available: NuGet packages (ScriptMCP is self-contained, no .NET SDK dependency). " +
         "Use System.Text.Json for JSON. Use System.Net.Http.HttpClient for HTTP. Use System.Diagnostics.Process for shell commands. " +
-        "DIRECTIVES: Scripts support #r \"path.dll\" to reference external .NET assemblies and #load \"path.cs\" to include C# source files. " +
+        "DIRECTIVES: Scripts support #r \"path.dll\" to reference external .NET assemblies and #load \"path.csx\" to include C# source files. " +
         "Directives must appear at the top of the script body before any code. Both absolute and relative paths are supported. " +
         "#load files become separate compilation units — code must be in classes/structs, not bare top-level statements. " +
         "Loaded files can contain nested #r and #load directives (max depth 10, circular references detected). " +
