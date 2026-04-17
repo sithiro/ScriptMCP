@@ -13,6 +13,7 @@ ScriptMCP.Plugin/server/
 /commands/
 /hooks/
 /skills/
+/plugins/scriptmcp-codex-plugin/
 *.binlog
 .*
 **/.*
