@@ -389,6 +389,39 @@ Call `read_scheduled_task` directly to read the result written for a script by s
 
 - `function_name`: required, returns `<function>.txt` if append mode is active; otherwise the latest matching timestamped file
 
+### Terminal Display (Token-Free Output)
+
+`call_process` supports a `terminal` parameter that sends output directly to a visible Windows Terminal window or tab — **the agent never sees the data**. This is a major token saver for any script that produces tables, reports, or market data the user wants to view but the agent does not need to process.
+
+| `terminal` value | Behavior | Use when user says |
+|---|---|---|
+| `"window"` | New WT window for every call | "in a new window" |
+| `"tabs"` | One named WT window, subsequent calls add tabs | "in the scriptmcp window" |
+| `"self"` | New tab in the current agent WT window | "in a new tab" / "in my terminal" |
+| _(empty)_ | Headless — output captured and returned to agent | _(default)_ |
+
+**Show a watchlist in a new window (agent sees no data):**
+
+```
+call_process(name="watchlist_show", arguments={"name":"tech"}, terminal="window")
+```
+
+**Show correlation matrix in agent's own tab:**
+
+```
+call_process(name="watchlist_correlation_matrix", arguments={"showMatrix":true}, terminal="self")
+```
+
+**Open three symbols in parallel tabs:**
+
+```
+call_process(name="watchlist_show", arguments={"symbols":"AMD"}, terminal="tabs")
+call_process(name="watchlist_show", arguments={"symbols":"TSLA"}, terminal="tabs")   // parallel
+call_process(name="watchlist_show", arguments={"symbols":"ABTC"}, terminal="tabs")   // parallel
+```
+
+When `terminal` is set, `call_process` returns immediately with no output. Do not wait for or relay any result.
+
 ### Telegram Notifications
 
 The CLI supports `--telegram [filepath]` to send script output to a Telegram channel alongside any `--exec*` mode. If no filepath is given, it looks for `telegram.json` beside the active database. The file must contain `botToken` and `chatId`. Telegram failures are non-fatal (warning to stderr).

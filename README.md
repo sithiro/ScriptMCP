@@ -7,11 +7,13 @@ A script runtime for AI agents via the Model Context Protocol (MCP). ScriptMCP l
 ## Install
 
 **Windows (PowerShell):**
+
 ```
 powershell -c "irm https://sithiro.github.io/ScriptMCP/install.ps1 | iex"
 ```
 
 **Linux/macOS:**
+
 ```bash
 curl -fsSL https://sithiro.github.io/ScriptMCP/install.sh | bash
 ```
@@ -32,13 +34,13 @@ ScriptMCP exposes 20 MCP tools that together form a self-extending toolbox. You 
 AI Agent ──► MCP Protocol ──► ScriptMCP Server ──► .NET 9 ──► Execute ──┐
    ▲                                │                                   │
    │                                ▼                                   │
-   │                          Roslyn Compiler                           │
-   │                                │                                   │
-   │                                ▼                                   │
-   │                          SQLite Database                           │
-   │                       (scripts + assemblies)                       │
-   │                                                                    │
-   └──────────────────────── Output ◄───────────────────────────────────┘
+   │    Tokenized             Roslyn Compiler                           │
+   └────────────────┐               │                                   │
+                    │               ▼                                   │
+ Window             │         SQLite Database                           │
+ Tabs       Token   │      (scripts + assemblies)                       │
+ File        Free   │                                                   │
+ Telegram ◄──────── └─────── Output ◄───────────────────────────────────┘
 ```
 
 ### How It Works
@@ -134,6 +136,27 @@ You:    delete the stock price task
 Agent:  Scheduled task deleted.
 ```
 
+### Terminal display — token-free output
+
+When the user wants to **see** script output but the agent doesn't need to read it, `call_process` sends it directly to a Windows Terminal window or tab. The agent never sees the data — saving hundreds to thousands of tokens per call:
+
+```
+You:    show me my tech watchlist in a new window
+Agent:  (opens a new Windows Terminal window with the table — returns nothing to the agent)
+
+You:    show AMD, TSLA and ABTC each in a new tab
+Agent:  (opens 3 tabs in parallel in the named ScriptMCP window — zero data returned)
+
+You:    show the correlation matrix in my terminal tab
+Agent:  (opens a tab in the current agent window — agent sees no table data)
+```
+
+Three terminal modes via the `terminal` parameter on `call_process`:
+
+- `"window"` — new WT window for every call
+- `"tabs"` — one named WT window, subsequent calls add tabs
+- `"self"` — new tab inside the current agent WT window
+
 ### Switching databases
 
 ```
@@ -174,25 +197,25 @@ Agent:  78.54
 
 ScriptMCP provides 20 tools across four categories. You don't call these directly — the agent uses them based on your natural language requests.
 
-| Category | Tools | What you say (examples) |
-|----------|-------|-------------|
-| **Script lifecycle** | create, list, inspect, update, delete | "create a script that...", "show me my scripts", "delete fibonacci" |
-| **Execution** | call_script, call_process | "run get_time", "what's the weather?" |
-| **File sync** | load, export, compile | "load script from file", "export to disk", "compile to DLL" |
-| **Database** | get, set, delete database | "which database?", "switch to work.db" |
-| **Scheduling** | create, list, read, start, stop, delete task | "schedule X every 5 minutes", "show last result" |
+| Category             | Tools                                        | What you say (examples)                                             |
+| -------------------- | -------------------------------------------- | ------------------------------------------------------------------- |
+| **Script lifecycle** | create, list, inspect, update, delete        | "create a script that...", "show me my scripts", "delete fibonacci" |
+| **Execution**        | call_script, call_process                    | "run get_time", "show me my watchlist in a new window"              |
+| **File sync**        | load, export, compile                        | "load script from file", "export to disk", "compile to DLL"         |
+| **Database**         | get, set, delete database                    | "which database?", "switch to work.db"                              |
+| **Scheduling**       | create, list, read, start, stop, delete task | "schedule X every 5 minutes", "show last result"                    |
 
 For the full tool reference, see the [wiki](https://github.com/sithiro/ScriptMCP/wiki/MCP-Tools-Reference).
 
 ## Repository Structure
 
-| Folder | Purpose |
-| ------ | ------- |
-| `ScriptMCP.Console` | The MCP server entry point — hosts the stdio transport and wires up all tools |
-| `ScriptMCP.Library` | Core library containing script management, compilation, and tool definitions |
+| Folder                | Purpose                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| `ScriptMCP.Console`   | The MCP server entry point — hosts the stdio transport and wires up all tools                 |
+| `ScriptMCP.Library`   | Core library containing script management, compilation, and tool definitions                  |
 | `ScriptMCP.Extension` | Packaging for Claude Desktop — contains `manifest.json` and a `server/` folder for the binary |
-| `ScriptMCP.Plugin` | Claude Code plugin — slash commands, hooks, skills, and MCP server configuration |
-| `ScriptMCP.Tests` | Unit and integration tests |
+| `ScriptMCP.Plugin`    | Claude Code plugin — slash commands, hooks, skills, and MCP server configuration              |
+| `ScriptMCP.Tests`     | Unit and integration tests                                                                    |
 
 ## More Installation Options
 
@@ -202,10 +225,10 @@ For the full tool reference, see the [wiki](https://github.com/sithiro/ScriptMCP
 
 Download the `.mcpb` file for your platform from the [latest release](https://github.com/sithiro/ScriptMCP/releases/latest):
 
-| Platform | File |
-| -------- | ---- |
-| Windows x64 | `scriptmcp-win-x64.mcpb` |
-| Linux x64 | `scriptmcp-linux-x64.mcpb` |
+| Platform                    | File                       |
+| --------------------------- | -------------------------- |
+| Windows x64                 | `scriptmcp-win-x64.mcpb`   |
+| Linux x64                   | `scriptmcp-linux-x64.mcpb` |
 | macOS arm64 (Apple Silicon) | `scriptmcp-osx-arm64.mcpb` |
 
 Open the `.mcpb` file in Claude Desktop to install the ScriptMCP extension. This provides the MCP server and all 20 tools.
@@ -277,15 +300,15 @@ scriptmcp --exec get_stock_price '{"symbol":"AAPL"}'
 scriptmcp --db work.db --exec get_time
 ```
 
-| Argument | Description |
-|----------|-------------|
-| `--db <path>` | Use a specific database (relative names resolve under the default data directory) |
-| `--exec <name> [args]` | Execute a script and write result to stdout |
-| `--exec-out <name> [args]` | Execute and save output to a timestamped file |
-| `--exec-out-append <name> [args]` | Execute and append output to a stable file |
-| `--exec-out-rewrite <name> [args]` | Execute and overwrite a stable file each run |
-| `--path <filepath>` | Custom output filepath (requires `--exec-out`, `--exec-out-append`, or `--exec-out-rewrite`). For `--exec-out`, the timestamp is postfixed to the base filename. |
-| `--telegram [filepath]` | Send output to a Telegram channel (works with any `--exec*` mode). Optionally specify the path to `telegram.json`; defaults to `telegram.json` beside the database. |
+| Argument                           | Description                                                                                                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--db <path>`                      | Use a specific database (relative names resolve under the default data directory)                                                                                   |
+| `--exec <name> [args]`             | Execute a script and write result to stdout                                                                                                                         |
+| `--exec-out <name> [args]`         | Execute and save output to a timestamped file                                                                                                                       |
+| `--exec-out-append <name> [args]`  | Execute and append output to a stable file                                                                                                                          |
+| `--exec-out-rewrite <name> [args]` | Execute and overwrite a stable file each run                                                                                                                        |
+| `--path <filepath>`                | Custom output filepath (requires `--exec-out`, `--exec-out-append`, or `--exec-out-rewrite`). For `--exec-out`, the timestamp is postfixed to the base filename.    |
+| `--telegram [filepath]`            | Send output to a Telegram channel (works with any `--exec*` mode). Optionally specify the path to `telegram.json`; defaults to `telegram.json` beside the database. |
 
 ### Data Directory
 

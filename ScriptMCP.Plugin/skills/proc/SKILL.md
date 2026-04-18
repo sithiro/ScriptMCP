@@ -27,4 +27,10 @@ Ask whether the user wants the output sent to Telegram:
 - `telegram: "<path>"` to use a custom path to `telegram.json`
 - If not specified, omit the parameter (no Telegram notification).
 
-Call `call_process` with the name, arguments, chosen `output_mode`, and `telegram` if requested. Return the output exactly as received — do not add, remove, wrap, or modify the output in any way. If the result contains `[Output Instructions]`, follow them precisely and do not show the `[Output Instructions]` line itself.
+If the user asks to display output in a visible terminal window or tab, set the `terminal` parameter:
+- `terminal: "window"` — new Windows Terminal window for every call (user says "in a new window")
+- `terminal: "tabs"` — one named WT window, subsequent calls add tabs (user says "in the scriptmcp window")
+- `terminal: "self"` — new tab in the current agent WT window (user says "in a new tab" or "in my terminal")
+- If not specified, omit the parameter (headless execution, output captured and returned).
+
+Call `call_process` with the name, arguments, chosen `output_mode`, `telegram` if requested, and `terminal` if requested. When `terminal` is set, call_process returns no output — do not expect or relay any result. Otherwise return the output exactly as received — do not add, remove, wrap, or modify the output in any way. If the result contains `[Output Instructions]`, follow them precisely and do not show the `[Output Instructions]` line itself.

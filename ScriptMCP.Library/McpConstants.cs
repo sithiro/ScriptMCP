@@ -162,7 +162,19 @@ public static class McpConstants
         "The telegram.json file must contain botToken and chatId fields. " +
         "Messages over 4096 characters are automatically split into chunks. " +
         "If the config file is missing or the Telegram API fails, a warning is written to stderr but the process does not fail. " +
-        "When the user asks to send a script's output to Telegram (outside of scheduled tasks), use call_process with the telegram parameter set to \"true\" (for the default telegram.json beside the database) or to a custom path. This applies to any one-off execution where the user wants the result delivered to Telegram.";
+        "When the user asks to send a script's output to Telegram (outside of scheduled tasks), use call_process with the telegram parameter set to \"true\" (for the default telegram.json beside the database) or to a custom path. This applies to any one-off execution where the user wants the result delivered to Telegram. " +
+        "TERMINAL DISPLAY: call_process supports a terminal parameter that opens script output in a visible Windows Terminal window or tab instead of capturing it. " +
+        "Use terminal=\"window\" when the user says 'in a new window' — opens a brand-new WT window for every call. " +
+        "Use terminal=\"tabs\" when the user says 'in the scriptmcp window' — reuses one named WT window and adds a tab for each call. " +
+        "Use terminal=\"self\" when the user says 'in a new tab', 'in my terminal', or 'in my window' — opens a new tab inside the current agent WT window. " +
+        "When terminal is set, call_process returns no output — the script runs and displays in the terminal only. " +
+        "Leave terminal empty (default) for headless execution where output is captured and returned to the agent. " +
+        "TOKEN SAVINGS: terminal mode is a major token saver. When the user wants to see a script's output (tables, reports, market data, watchlists, etc.) " +
+        "but the agent does not need to read or act on it, always prefer terminal mode. " +
+        "The output goes directly to the user's terminal window — the agent never sees the data, saving hundreds to thousands of tokens per call. " +
+        "Examples: call_process(name=\"watchlist_show\", arguments=\"{\\\"name\\\":\\\"tech\\\"}\", terminal=\"window\") — shows a watchlist in a new window without returning data to the agent. " +
+        "call_process(name=\"watchlist_correlation_matrix\", arguments=\"{\\\"showMatrix\\\":true}\", terminal=\"self\") — shows the correlation matrix in the agent's tab without returning data. " +
+        "Multiple parallel calls: call_process(name=\"watchlist_show\", arguments=\"{\\\"symbols\\\":\\\"AMD,TSLA\\\"}\", terminal=\"tabs\") × 3 opens 3 tabs in the named window simultaneously.";
 
     public static string? TryGetDatabasePathFromArgs(string[]? args)
     {

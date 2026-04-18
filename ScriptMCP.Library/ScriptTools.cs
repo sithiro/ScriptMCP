@@ -1132,13 +1132,75 @@ public class ScriptTools
 
     [McpServerTool(Name = "call_process")]
     [Description("Calls a script in a separate process (out-of-process execution). " +
-                 "Useful for parallel execution or isolating side effects.")]
+                 "Useful for parallel execution or isolating side effects. " +
+                 "Set terminal to display output in a visible Windows Terminal window or tab: " +
+                 "'window' opens a brand-new WT window for every call (use when user says 'in a new window'); " +
+                 "'tabs' reuses one named WT window and adds a tab for each call (use when user says 'in the scriptmcp window'); " +
+                 "'self' opens a new tab inside the current agent WT window (use when user says 'in a new tab' or 'in my terminal'). " +
+                 "Leave terminal empty for headless execution where output is captured and returned.")]
     public string CallProcess(
         [Description("The name of the script to call")] string name,
         [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}",
         [Description("Output mode: Default (uses --exec, no persisted output file), WriteNew (uses --exec-out, writes a new file per execution), WriteAppend (uses --exec-out-append, appends to one stable file), WriteRewrite (uses --exec-out-rewrite, overwrites one stable file each run)")] string output_mode = "Default",
-        [Description("When true, send the script output to a Telegram channel using telegram.json beside the database. Or provide a custom path to telegram.json.")] string telegram = "")
+        [Description("When true, send the script output to a Telegram channel using telegram.json beside the database. Or provide a custom path to telegram.json.")] string telegram = "",
+        [Description("Open output in a visible Windows Terminal window or tab instead of capturing it. Values: 'window' (new WT window each call), 'tabs' (one named WT window, subsequent calls add tabs), 'self' (new tab in the current agent WT window). Leave empty for headless execution.")] string terminal = "")
     {
+        if (!string.IsNullOrWhiteSpace(terminal))
+        {
+            if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+                return "Error: terminal parameter is only supported on Windows.";
+
+            var exePath2 = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath2))
+                return "Error: unable to resolve the current executable path.";
+
+            string dbPath2 = "";
+            var cmdArgs2 = Environment.GetCommandLineArgs();
+            for (int i = 0; i < cmdArgs2.Length - 1; i++)
+                if (string.Equals(cmdArgs2[i], "--db", StringComparison.OrdinalIgnoreCase)) { dbPath2 = cmdArgs2[i + 1]; break; }
+            if (string.IsNullOrEmpty(dbPath2))
+                dbPath2 = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ScriptMCP", "scriptmcp.db");
+
+            var exeEsc2    = exePath2.Replace("'", "''");
+            var dbEsc2     = dbPath2.Replace("'", "''");
+            var nameEsc2   = name.Replace("'", "''");
+            var argsForPS2 = arguments.Replace("'", "''").Replace("\"", "\\\"");
+
+            var psCmd2 =
+                "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " +
+                $"& '{exeEsc2}' --db '{dbEsc2}' --exec {nameEsc2} '{argsForPS2}' | " +
+                "Where-Object { $_ -notmatch '^\\[Output Instructions\\]' }; " +
+                "Write-Host ''; " +
+                "Write-Host 'Press any key to close...' -NoNewline; " +
+                "$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')";
+            var encoded2 = Convert.ToBase64String(Encoding.Unicode.GetBytes(psCmd2));
+
+            string wtFlag;
+            switch (terminal.Trim().ToLowerInvariant())
+            {
+                case "window": wtFlag = "-w new";        break;
+                case "tabs":   wtFlag = "-w scriptmcp";  break;
+                case "self":   wtFlag = "-w 0";          break;
+                default: return $"Error: invalid terminal value '{terminal}'. Supported: window, tabs, self.";
+            }
+
+            try
+            {
+                var psi2 = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "wt.exe",
+                    Arguments = $"{wtFlag} new-tab --title \"{name}\" powershell.exe -NoProfile -EncodedCommand {encoded2}",
+                    UseShellExecute = true,
+                };
+                System.Diagnostics.Process.Start(psi2);
+                return string.Empty;
+            }
+            catch (Exception ex2)
+            {
+                return $"Error launching terminal: {ex2.Message}";
+            }
+        }
+
         var exePath = Environment.ProcessPath;
         if (string.IsNullOrEmpty(exePath))
             return "Error: unable to resolve the current executable path.";
