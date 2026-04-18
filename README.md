@@ -34,7 +34,7 @@ ScriptMCP exposes 20 MCP tools that together form a self-extending toolbox. You 
 AI Agent ──► MCP Protocol ──► ScriptMCP Server ──► .NET 9 ──► Execute ──┐
    ▲                                │                                   │
    │                                ▼                                   │
-   │ Token-consuming          Roslyn Compiler                           │
+   │  Token-consume           Roslyn Compiler                           │
    └────────────────┐               │                                   │
 Terminal            │               ▼                                   │
 Window              │         SQLite Database                           │
