@@ -34,13 +34,13 @@ ScriptMCP exposes 20 MCP tools that together form a self-extending toolbox. You 
 AI Agent ──► MCP Protocol ──► ScriptMCP Server ──► .NET 9 ──► Execute ──┐
    ▲                                │                                   │
    │                                ▼                                   │
-   │    Tokenized             Roslyn Compiler                           │
+   │ Token-consuming          Roslyn Compiler                           │
    └────────────────┐               │                                   │
-                    │               ▼                                   │
- Window             │         SQLite Database                           │
- Tabs       Token   │      (scripts + assemblies)                       │
- File        Free   │                                                   │
- Telegram ◄──────── └─────── Output ◄───────────────────────────────────┘
+Terminal            │               ▼                                   │
+Window              │         SQLite Database                           │
+Tabs       Token    │      (scripts + assemblies)                       │
+File       -free    │                                                   │
+Telegram ◄───────── └─────── Output ◄───────────────────────────────────┘
 ```
 
 ### How It Works
@@ -136,9 +136,9 @@ You:    delete the stock price task
 Agent:  Scheduled task deleted.
 ```
 
-### Terminal display — token-free output
+### Token-free output
 
-When the user wants to **see** script output but the agent doesn't need to read it, `call_process` sends it directly to a Windows Terminal window or tab. The agent never sees the data — saving hundreds to thousands of tokens per call:
+When the user wants the output delivered instead of read back into the chat, ScriptMCP can send it straight to new windows, tabs, files, or Telegram. The agent never has to ingest the data, which can save hundreds to thousands of tokens per call:
 
 ```
 You:    show me my tech watchlist in a new window
@@ -150,12 +150,6 @@ Agent:  (opens 3 tabs in parallel in the named ScriptMCP window — zero data re
 You:    show the correlation matrix in my terminal tab
 Agent:  (opens a tab in the current agent window — agent sees no table data)
 ```
-
-Three terminal modes via the `terminal` parameter on `call_process`:
-
-- `"window"` — new WT window for every call
-- `"tabs"` — one named WT window, subsequent calls add tabs
-- `"self"` — new tab inside the current agent WT window
 
 ### Switching databases
 
