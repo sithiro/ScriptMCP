@@ -2598,6 +2598,23 @@ public class ScriptTools
                         }
                         catch { /* skip invalid files */ }
                     }
+
+                    var candidateDirectories = externalRefs
+                        .Select(Path.GetDirectoryName)
+                        .Where(static dir => !string.IsNullOrWhiteSpace(dir))
+                        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var dir in candidateDirectories)
+                    {
+                        var candidatePath = Path.Combine(dir!, assemblyName.Name + ".dll");
+                        if (!File.Exists(candidatePath)) continue;
+                        try
+                        {
+                            return context.LoadFromAssemblyPath(candidatePath);
+                        }
+                        catch { /* skip unloadable files */ }
+                    }
+
                     return null;
                 };
             }
@@ -3208,7 +3225,7 @@ public class ScriptTools
     }
 
     [McpServerTool(Name = "search_scripts")]
-    [Description("Searches stored scripts for a text string or regex pattern. Use searchIn to target a specific field: source (default, line-by-line body search), name, description, parameters, scripttype, codeformat, outputinstructions, dependson, externalrefs, or all.")]
+    [Description("Searches stored scripts for a text string or regex pattern in script source or metadata. Use this tool only when the user explicitly asks to search inside scripts. Do not use it for normal script selection. Use searchIn to target a specific field: source (default, line-by-line body search), name, description, parameters, scripttype, codeformat, outputinstructions, dependson, externalrefs, or all.")]
     public string SearchScripts(
         [Description("Text or regex pattern to search for")] string query,
         [Description("Field to search: source (default), name, description, parameters, scripttype, codeformat, outputinstructions, dependson, externalrefs, all")] string searchIn = "source",
