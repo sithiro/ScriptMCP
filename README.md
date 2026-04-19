@@ -28,7 +28,7 @@ code --add-mcp '{"name":"scriptmcp","command":"/path/to/scriptmcp","args":[]}' #
 
 ## Overview
 
-ScriptMCP exposes 20 MCP tools that together form a self-extending toolbox. You interact with the agent in natural language — the agent decides which tools to call.
+ScriptMCP exposes 21 MCP tools that together form a self-extending toolbox. You interact with the agent in natural language — the agent decides which tools to call.
 
 ```
 AI Agent ──► MCP Protocol ──► ScriptMCP Server ──► .NET 9 ──► Execute ──┐
@@ -189,7 +189,7 @@ Agent:  78.54
 
 ## MCP Tools
 
-ScriptMCP provides 20 tools across four categories. You don't call these directly — the agent uses them based on your natural language requests.
+ScriptMCP provides 21 tools across four categories. You don't call these directly — the agent uses them based on your natural language requests.
 
 | Category             | Tools                                        | What you say (examples)                                             |
 | -------------------- | -------------------------------------------- | ------------------------------------------------------------------- |
@@ -225,7 +225,7 @@ Download the `.mcpb` file for your platform from the [latest release](https://gi
 | Linux x64                   | `scriptmcp-linux-x64.mcpb` |
 | macOS arm64 (Apple Silicon) | `scriptmcp-osx-arm64.mcpb` |
 
-Open the `.mcpb` file in Claude Desktop to install the ScriptMCP extension. This provides the MCP server and all 20 tools.
+Open the `.mcpb` file in Claude Desktop to install the ScriptMCP extension. This provides the MCP server and all 21 tools.
 
 ![ScriptMCP Extension Install](snapshot5.png)
 

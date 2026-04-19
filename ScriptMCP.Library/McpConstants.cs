@@ -134,6 +134,10 @@ public static class McpConstants
         "- delete_database: Deletes a ScriptMCP database file. " +
         "Parameters: path (string, required), confirm (bool, default false). " +
         "First call it with confirm=false so it can verify that the database exists, reject attempts to delete the default database, and return a yes-or-no confirmation prompt. Only call it again with confirm=true after the user says yes. If the target database is currently active, ScriptMCP will switch to the default database first. " +
+        "- search_scripts: Searches all stored scripts for a text string or regex pattern. " +
+        "Parameters: query (string, required), searchIn (string, default \"source\"), regex (bool, default false). " +
+        "searchIn values: source (line-by-line body search, default), name, description, parameters, scripttype, codeformat, outputinstructions, dependson, externalrefs, all. " +
+        "Returns each match as 'scriptname: matching line' for source searches, or 'scriptname [fieldname]: value' for metadata searches. " +
         "- read_scheduled_task: Reads the most recent scheduled-task output file for a specific script from the output directory beside the database. " +
         "If <script>.txt exists from append mode, that file is returned; otherwise the latest timestamped file is returned. " +
         "Parameter: function_name (string, required). " +
@@ -155,7 +159,7 @@ public static class McpConstants
         "On Windows, disables ScriptMCP\\<script> (<interval>m). On Linux/macOS, cron entries are either present or absent, so this reports that deletion is required instead. " +
         "Parameters: function_name (string, required), interval_minutes (int, default 1). " +
         "These are native MCP tools — they do not appear in list_scripts and do not need inspection before use. " +
-        "Call them directly when the user asks to inspect the active database, switch databases, create a database via set_database, delete a database, schedule a script, list tasks, start or stop a task, delete a scheduled task, or read previous execution output. " +
+        "Call them directly when the user asks to inspect the active database, switch databases, create a database via set_database, delete a database, search script source or metadata, schedule a script, list tasks, start or stop a task, delete a scheduled task, or read previous execution output. " +
         "TELEGRAM NOTIFICATIONS: The CLI supports --telegram [filepath] to send script output to a Telegram channel. " +
         "It works with any --exec* mode (--exec, --exec-out, --exec-out-append, --exec-out-rewrite) and is independent of file output. " +
         "If no filepath is given, ScriptMCP looks for telegram.json beside the active database. " +

@@ -3206,4 +3206,113 @@ public class ScriptTools
             }
         }
     }
+
+    [McpServerTool(Name = "search_scripts")]
+    [Description("Searches stored scripts for a text string or regex pattern. Use searchIn to target a specific field: source (default, line-by-line body search), name, description, parameters, scripttype, codeformat, outputinstructions, dependson, externalrefs, or all.")]
+    public string SearchScripts(
+        [Description("Text or regex pattern to search for")] string query,
+        [Description("Field to search: source (default), name, description, parameters, scripttype, codeformat, outputinstructions, dependson, externalrefs, all")] string searchIn = "source",
+        [Description("If true, treat query as a case-insensitive regex pattern. Default false.")] bool regex = false)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return "No search query provided.";
+
+        System.Text.RegularExpressions.Regex? pattern = null;
+        if (regex)
+        {
+            try
+            {
+                pattern = new System.Text.RegularExpressions.Regex(query,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                return $"Invalid regex: {ex.Message}";
+            }
+        }
+
+        // Map user-facing names to column names; body is searched line-by-line, others as whole values
+        var fieldMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["source"]             = "body",
+            ["name"]               = "name",
+            ["description"]        = "description",
+            ["parameters"]         = "parameters",
+            ["scripttype"]         = "script_type",
+            ["codeformat"]         = "code_format",
+            ["outputinstructions"] = "output_instructions",
+            ["dependson"]          = "dependencies",
+            ["externalrefs"]       = "external_refs",
+        };
+
+        bool searchAll = searchIn.Equals("all", StringComparison.OrdinalIgnoreCase);
+
+        if (!searchAll && !fieldMap.ContainsKey(searchIn))
+            return $"Unknown searchIn '{searchIn}'. Valid: source, name, description, parameters, scripttype, codeformat, outputinstructions, dependson, externalrefs, all";
+
+        var results = new System.Text.StringBuilder();
+
+        using var conn = new SqliteConnection($"Data Source={SavePath}");
+        conn.Open();
+        ConfigureConnection(conn);
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name, body, description, parameters, script_type, code_format, output_instructions, dependencies, external_refs FROM scripts ORDER BY name;";
+
+        bool Matches(string? value) => value != null && (
+            regex ? pattern!.IsMatch(value) : value.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var scriptName   = reader.IsDBNull(0) ? "" : reader.GetString(0);
+            var body         = reader.IsDBNull(1) ? "" : reader.GetString(1);
+            var description  = reader.IsDBNull(2) ? null : reader.GetString(2);
+            var parameters   = reader.IsDBNull(3) ? null : reader.GetString(3);
+            var scriptType   = reader.IsDBNull(4) ? null : reader.GetString(4);
+            var codeFormat   = reader.IsDBNull(5) ? null : reader.GetString(5);
+            var outputInstr  = reader.IsDBNull(6) ? null : reader.GetString(6);
+            var dependencies = reader.IsDBNull(7) ? null : reader.GetString(7);
+            var externalRefs = reader.IsDBNull(8) ? null : reader.GetString(8);
+
+            bool doSource = searchAll || fieldMap[searchIn] == "body";
+            bool doMeta   = searchAll || fieldMap[searchIn] != "body";
+
+            if (doSource)
+            {
+                foreach (var raw in body.Split('\n'))
+                {
+                    var line = raw.TrimEnd('\r');
+                    if (Matches(line))
+                        results.AppendLine($"{scriptName}: {line.Trim()}");
+                }
+            }
+
+            if (doMeta)
+            {
+                var metaFields = new (string label, string col, string? value)[]
+                {
+                    ("name",               "name",               scriptName),
+                    ("description",        "description",        description),
+                    ("parameters",         "parameters",         parameters),
+                    ("scripttype",         "script_type",        scriptType),
+                    ("codeformat",         "code_format",        codeFormat),
+                    ("outputinstructions", "output_instructions",outputInstr),
+                    ("dependson",          "dependencies",       dependencies),
+                    ("externalrefs",       "external_refs",      externalRefs),
+                };
+
+                foreach (var (label, col, value) in metaFields)
+                {
+                    if (!searchAll && fieldMap[searchIn] != col) continue;
+                    if (Matches(value))
+                        results.AppendLine($"{scriptName} [{label}]: {value}");
+                }
+            }
+        }
+
+        return results.Length == 0
+            ? $"No matches found for: {query}"
+            : results.ToString().TrimEnd();
+    }
 }

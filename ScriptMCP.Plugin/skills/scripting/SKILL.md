@@ -49,6 +49,7 @@ ScriptMCP exposes these MCP tools:
 | `get_database`          | Return the currently active ScriptMCP database path                         |
 | `set_database`          | Switch the active ScriptMCP database at runtime                             |
 | `delete_database`       | Delete a non-default ScriptMCP database after confirmation                  |
+| `search_scripts`        | Search stored scripts by source code or metadata field                      |
 | `read_scheduled_task`   | Read the latest scheduled-task output file for a script                     |
 | `create_scheduled_task` | Create a scheduled task (Windows Task Scheduler or cron) for a script       |
 | `delete_scheduled_task` | Delete a scheduled task for a script                                        |
@@ -350,7 +351,7 @@ For one-off execution with Telegram delivery, use `call_process` with the `teleg
 
 ### Native Tools vs Scripts
 
-`get_database`, `set_database`, `delete_database`, `read_scheduled_task`, `create_scheduled_task`, `delete_scheduled_task`, `list_scheduled_tasks`, `start_scheduled_task`, and `stop_scheduled_task` are **native MCP tools** — they do not appear in `list_scripts` and do not need inspection before use. Call them directly.
+`get_database`, `set_database`, `delete_database`, `search_scripts`, `read_scheduled_task`, `create_scheduled_task`, `delete_scheduled_task`, `list_scheduled_tasks`, `start_scheduled_task`, and `stop_scheduled_task` are **native MCP tools** — they do not appear in `list_scripts` and do not need inspection before use. Call them directly.
 
 ## Recognizing Implied Script Calls
 
