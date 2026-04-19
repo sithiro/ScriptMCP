@@ -334,3 +334,13 @@ If ScriptMCP is not behaving as expected, you can reinforce the instructions by 
 - Framework-dependent release zips require a compatible .NET 9 runtime on the target machine
 
 Copyright (C) 2026 Bill Sithiro
+
+Permission is granted to use this software for personal, non-commercial use only.
+
+You may not use this software, or any derivative work based on it, for any commercial purpose
+without prior written permission from the copyright holder.
+
+You may not redistribute, sublicense, or offer this software as a service without prior written
+permission from the copyright holder.
+
+This software is provided "as is", without warranty of any kind.
