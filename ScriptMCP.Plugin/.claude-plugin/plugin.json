@@ -10,6 +10,5 @@
   },
   "repository": "https://github.com/sithiro/ScriptMCP",
   "homepage": "https://github.com/sithiro/ScriptMCP",
-  "license": "AGPL-3.0-only",
   "keywords": ["scripting", "automation", "jit", "mcp", "scripts", ".net", "csharp"]
 }

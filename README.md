@@ -332,3 +332,5 @@ If ScriptMCP is not behaving as expected, you can reinforce the instructions by 
 - **.NET 9 / C# 13** runtime
 - Self-contained release zips do not require a separate .NET installation
 - Framework-dependent release zips require a compatible .NET 9 runtime on the target machine
+
+Copyright (C) 2026 Bill Sithiro
