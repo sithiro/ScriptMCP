@@ -11,6 +11,7 @@ var supportedOptions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 {
     "--db",
     "--exec",
+    "--exec-stream",
     "--exec-out",
     "--exec-out-append",
     "--exec-out-rewrite",
@@ -33,7 +34,7 @@ for (int i = 0; i < args.Length; i++)
         optionName = "--telegram";
     else if (!supportedOptions.Contains(arg))
     {
-        Console.Error.WriteLine($"Error: unsupported argument '{arg}'. Supported arguments: --db, --exec, --exec-out, --exec-out-append, --exec-out-rewrite, --path, --telegram.");
+        Console.Error.WriteLine($"Error: unsupported argument '{arg}'. Supported arguments: --db, --exec, --exec-stream, --exec-out, --exec-out-append, --exec-out-rewrite, --path, --telegram.");
         Environment.ExitCode = 1;
         return;
     }
@@ -219,6 +220,18 @@ if (hasTelegram && !hasAnyExec)
 {
     Console.Error.WriteLine("Error: --telegram requires one of --exec, --exec-out, --exec-out-append, or --exec-out-rewrite.");
     Environment.ExitCode = 1;
+    return;
+}
+
+// ── CLI mode: --exec-stream <functionName> [argsJson] ───────────────────────
+// Executes a script with output streamed directly to stdout (no buffering).
+var execStreamIndex = Array.FindIndex(args, a => string.Equals(a, "--exec-stream", StringComparison.OrdinalIgnoreCase));
+if (execStreamIndex >= 0 && execStreamIndex + 1 < args.Length)
+{
+    var functionName = args[execStreamIndex + 1];
+    var argsJson = (execStreamIndex + 2 < args.Length && !args[execStreamIndex + 2].StartsWith("--")) ? args[execStreamIndex + 2] : "{}";
+    var tools = new ScriptTools();
+    tools.CallScriptStreaming(functionName, argsJson);
     return;
 }
 

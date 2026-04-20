@@ -82,6 +82,41 @@ public sealed class ScriptToolsDatabaseTests
     }
 
     [Fact]
+    public void UpdateScriptTypeToInstructionsClearsCompiledAssemblyAndKeepsNonNullCodeFormat()
+    {
+        var name = UniqueName("test_update_to_instructions");
+        _tools.CreateScript(
+            name: name,
+            description: "Starts as compiled code.",
+            parameters: "[]",
+            body: "Console.Write(\"code-output\");",
+            functionType: "code",
+            outputInstructions: "");
+
+        var update = _tools.UpdateScript(name, "script_type", "instructions");
+        Assert.Contains("updated successfully: script_type", update, StringComparison.OrdinalIgnoreCase);
+
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_fixture.DatabasePath}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT script_type, code_format, compiled_assembly FROM scripts WHERE name = @name";
+            cmd.Parameters.AddWithValue("@name", name);
+            using var reader = cmd.ExecuteReader();
+
+            Assert.True(reader.Read());
+            Assert.Equal("instructions", reader.GetString(0));
+            Assert.False(reader.IsDBNull(1));
+            Assert.Equal("", reader.GetString(1));
+            Assert.True(reader.IsDBNull(2));
+        }
+
+        var inspection = _tools.InspectScript(name, fullInspection: true);
+        Assert.Contains("Type:        instructions", inspection, StringComparison.Ordinal);
+        Assert.Contains("Compiled:    N/A (instructions)", inspection, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RegistersAndExecutesTopLevelConsoleScriptUsingStdout()
     {
         var name = UniqueName("test_top_level");
@@ -292,6 +327,107 @@ Console.Write(args.Length + "|" + args[0]);
             Assert.Contains("@scriptmcp type: instructions", content, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Do the thing.", content, StringComparison.Ordinal);
             Assert.DoesNotContain("//", content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalDirectory);
+        }
+    }
+
+    [Fact]
+    public void CreateLibraryCodeScriptCompilesWithoutEntryPointAndCannotBeCalledDirectly()
+    {
+        var name = UniqueName("test_library_code");
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Reusable library helper.",
+            parameters: "[]",
+            body: """
+public static class LibraryHelper
+{
+    public static string Message => "hello from library";
+}
+""",
+            functionType: "code",
+            outputInstructions: "",
+            codeFormat: "library");
+
+        Assert.Contains("created successfully", result, StringComparison.OrdinalIgnoreCase);
+
+        var inspection = _tools.InspectScript(name, fullInspection: true);
+        Assert.Contains("Type:        code", inspection, StringComparison.Ordinal);
+        Assert.Contains("Code Format: library", inspection, StringComparison.Ordinal);
+        Assert.Contains("Compiled:    Yes", inspection, StringComparison.Ordinal);
+
+        var callResult = _tools.CallScript(name);
+        Assert.Equal($"Script '{name}' is a library code script and cannot be executed directly. Load it from another script with #load.", callResult);
+    }
+
+    [Fact]
+    public void LibraryCodeScriptCanBeLoadedFromDatabase()
+    {
+        var helperName = UniqueName("test_library_helper");
+        var consumerName = UniqueName("test_library_consumer");
+
+        Assert.Contains("created successfully", _tools.CreateScript(
+            name: helperName,
+            description: "Shared library helper.",
+            parameters: "[]",
+            body: """
+public static class LoadedLibraryHelper
+{
+    public static string Message => "library-loaded";
+    public static string Format(string name) => $"{Message}:{name}";
+}
+""",
+            functionType: "code",
+            outputInstructions: "",
+            codeFormat: "library"), StringComparison.OrdinalIgnoreCase);
+
+        Assert.Contains("created successfully", _tools.CreateScript(
+            name: consumerName,
+            description: "Consumes the library helper.",
+            parameters: "[]",
+            body: $"""
+                #load "{helperName}"
+
+                Console.Write(LoadedLibraryHelper.Format("ok"));
+                """,
+            functionType: "code",
+            outputInstructions: ""), StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(consumerName);
+        Assert.Equal("library-loaded:ok", callResult);
+    }
+
+    [Fact]
+    public void ExportLibraryCodeScriptUsesCsxAndIncludesCodeFormatMetadata()
+    {
+        var name = UniqueName("test_export_library");
+        var originalDirectory = Directory.GetCurrentDirectory();
+        Directory.SetCurrentDirectory(_fixture.TestDataDirectory);
+
+        try
+        {
+            Assert.Contains("created successfully", _tools.CreateScript(
+                name: name,
+                description: "Library export.",
+                parameters: "[]",
+                body: "public static class ExportedLibrary { public static string Value => \"x\"; }",
+                functionType: "code",
+                outputInstructions: "",
+                codeFormat: "library"), StringComparison.OrdinalIgnoreCase);
+
+            var result = _tools.ExportScript(name);
+            var exportPath = Path.Combine(_fixture.TestDataDirectory, $"{name}.csx");
+
+            Assert.Contains("exported to", result, StringComparison.OrdinalIgnoreCase);
+            Assert.True(File.Exists(exportPath));
+
+            var content = File.ReadAllText(exportPath);
+            Assert.Contains("@scriptmcp type: code", content, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("@scriptmcp code_format: library", content, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -872,6 +1008,75 @@ Console.Write(args.Length + "|" + args[0]);
 
         var callResult = _tools.CallScript(name);
         Assert.Equal("Hello from #load!", callResult);
+    }
+
+    [Fact]
+    public void LoadDirective_ExtensionlessNameLoadsScriptFromDatabase()
+    {
+        var helperName = UniqueName("test_load_db_helper");
+        var consumerName = UniqueName("test_load_db_consumer");
+
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_fixture.DatabasePath}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT INTO scripts (name, description, parameters, script_type, body, compiled_assembly, output_instructions, dependencies, code_format)
+                VALUES (@name, @description, @parameters, 'code', @body, NULL, NULL, '', 'top_level')";
+            cmd.Parameters.AddWithValue("@name", helperName);
+            cmd.Parameters.AddWithValue("@description", "Shared helper loaded from the database.");
+            cmd.Parameters.AddWithValue("@parameters", "[]");
+            cmd.Parameters.AddWithValue("@body", """
+public static class DbLoadHelper
+{
+    public static string LoadedGreeting() => "Hello from db #load!";
+}
+""");
+            cmd.ExecuteNonQuery();
+        }
+
+        var body = $$"""
+            #load "{{helperName}}"
+
+            Console.Write(DbLoadHelper.LoadedGreeting());
+            """;
+
+        var result = _tools.CreateScript(
+            name: consumerName,
+            description: "Tests extensionless database #load.",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains("created successfully", result, StringComparison.OrdinalIgnoreCase);
+
+        var callResult = _tools.CallScript(consumerName);
+        Assert.Equal("Hello from db #load!", callResult);
+    }
+
+    [Fact]
+    public void LoadDirective_ExtensionlessMissingScriptMentionsActiveDatabase()
+    {
+        var name = UniqueName("test_load_missing_db");
+        var missingScript = UniqueName("missing_db_script");
+
+        var body = $$"""
+            #load "{{missingScript}}"
+
+            Console.Write("should not get here");
+            """;
+
+        var result = _tools.CreateScript(
+            name: name,
+            description: "Tests missing extensionless database #load.",
+            body: body,
+            functionType: "code",
+            parameters: "[]",
+            outputInstructions: "");
+
+        Assert.Contains($"script '{missingScript}' was not found in the active database", result, StringComparison.Ordinal);
+        Assert.Contains("Extensionless #load targets are resolved from the database", result, StringComparison.Ordinal);
     }
 
     [Fact]

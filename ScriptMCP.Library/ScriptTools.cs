@@ -55,6 +55,7 @@ internal sealed class PreprocessResult
 public class ScriptTools
 {
     private const string TopLevelCodeFormat = "top_level";
+    private const string LibraryCodeFormat = "library";
     private const string UnmigratedCodeFormat = "legacy_method_body";
 
     private enum ScriptProcessOutputMode
@@ -480,7 +481,8 @@ public class ScriptTools
         var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parametersJson, ReadOptions)
                         ?? new List<DynParam>();
 
-        var isInstr = string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase);
+            var isInstr = string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase);
+            var isLibrary = string.Equals(codeFormat, LibraryCodeFormat, StringComparison.OrdinalIgnoreCase);
 
         var sb = new StringBuilder();
         sb.AppendLine($"Script: {funcName}");
@@ -510,7 +512,7 @@ public class ScriptTools
             sb.AppendLine();
             sb.AppendLine($"Compiled:    {(isInstr ? "N/A (instructions)" : hasAssembly ? "Yes" : "No (missing assembly)")}");
             sb.AppendLine();
-            sb.AppendLine($"Source ({(isInstr ? "Instructions" : "C# Code")}):");
+            sb.AppendLine($"Source ({(isInstr ? "Instructions" : isLibrary ? "C# Library Code" : "C# Code")}):");
 
             var lines = body.Split('\n');
             for (int i = 0; i < lines.Length; i++)
@@ -531,7 +533,7 @@ public class ScriptTools
     [McpServerTool(Name = "create_script")]
     [Description("Creates a new script that can be called later. Use scriptType 'instructions' " +
                  "for plain English instructions (supports {paramName} substitution). " +
-                 "Use scriptType 'code' for top-level C# source, like a Program.cs file, compiled and executed at runtime via Roslyn.")]
+                 "Use scriptType 'code' for C# source compiled via Roslyn. codeFormat 'top_level' creates a runnable script, while 'library' creates a load-only compiled module.")]
     public string CreateScript(
         [Description("Script name")] string name,
         [Description("Description of what the script does")] string description,
@@ -542,13 +544,16 @@ public class ScriptTools
         [Description("Script type: 'instructions' for plain English (recommended), or 'code' for C# source (compiled at runtime)")]
             string functionType = "instructions",
         [Description("Optional instructions for how to present/format the output after execution (e.g. 'present as a markdown table', 'summarize in bullet points')")]
-            string outputInstructions = "")
+            string outputInstructions = "",
+        [Description("For code scripts only: 'top_level' (default runnable script) or 'library' (load-only module for #load).")]
+            string codeFormat = "")
     {
         try
         {
             var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parameters, ReadOptions)
                             ?? new List<DynParam>();
             var resolvedFunctionType = string.IsNullOrWhiteSpace(functionType) ? "instructions" : functionType;
+            var resolvedCodeFormat = ResolveCodeFormat(resolvedFunctionType, codeFormat);
 
             var func = new Script
             {
@@ -560,9 +565,7 @@ public class ScriptTools
                 OutputInstructions  = string.IsNullOrWhiteSpace(outputInstructions)
                     ? null
                     : outputInstructions,
-                CodeFormat          = string.Equals(resolvedFunctionType, "instructions", StringComparison.OrdinalIgnoreCase)
-                    ? null
-                    : TopLevelCodeFormat,
+                CodeFormat          = resolvedCodeFormat,
             };
 
             ValidateScriptName(func.Name);
@@ -616,6 +619,7 @@ public class ScriptTools
         [Description("Optional description. On update, omit to preserve the existing description.")] string description = "",
         [Description("Optional JSON array of parameters. On update, omit to preserve the existing parameters.")] string parameters = "",
         [Description("Optional script type: 'code' or 'instructions'. On update, omit to preserve the existing type. New scripts default to 'code'.")] string scriptType = "",
+        [Description("Optional code format for code scripts: 'top_level' or 'library'. On update, omit to preserve the existing format.")] string codeFormat = "",
         [Description("Optional output instructions. On update, omit to preserve existing output instructions.")] string outputInstructions = "")
     {
         try
@@ -644,7 +648,7 @@ public class ScriptTools
 
             using var readCmd = conn.CreateCommand();
             readCmd.CommandText = @"
-                SELECT description, parameters, script_type, output_instructions
+                SELECT description, parameters, script_type, code_format, output_instructions
                 FROM scripts
                 WHERE name = @name";
             readCmd.Parameters.AddWithValue("@name", resolvedName);
@@ -655,6 +659,7 @@ public class ScriptTools
             headerMeta.TryGetValue("description", out var hDesc);
             headerMeta.TryGetValue("parameters", out var hParams);
             headerMeta.TryGetValue("type", out var hType);
+            headerMeta.TryGetValue("code_format", out var hCodeFormat);
             headerMeta.TryGetValue("output_instructions", out var hOutput);
 
             var resolvedDescription = !string.IsNullOrWhiteSpace(description)
@@ -681,12 +686,20 @@ public class ScriptTools
                         ? reader.GetString(2)
                         : "code";
 
+            var resolvedCodeFormat = !string.IsNullOrWhiteSpace(codeFormat)
+                ? codeFormat
+                : !string.IsNullOrWhiteSpace(hCodeFormat)
+                    ? hCodeFormat
+                    : exists && !reader.IsDBNull(3)
+                        ? reader.GetString(3)
+                        : TopLevelCodeFormat;
+
             var resolvedOutputInstructions = !string.IsNullOrWhiteSpace(outputInstructions)
                 ? outputInstructions
                 : !string.IsNullOrWhiteSpace(hOutput)
                     ? hOutput
-                    : exists && !reader.IsDBNull(3)
-                        ? reader.GetString(3)
+                    : exists && !reader.IsDBNull(4)
+                        ? reader.GetString(4)
                         : "";
 
             reader.Close();
@@ -697,7 +710,8 @@ public class ScriptTools
                 parameters: resolvedParameters,
                 body: rawContent,
                 functionType: resolvedScriptType,
-                outputInstructions: resolvedOutputInstructions);
+                outputInstructions: resolvedOutputInstructions,
+                codeFormat: resolvedCodeFormat);
 
             if (result.StartsWith("Compilation failed:", StringComparison.OrdinalIgnoreCase) ||
                 result.StartsWith("Creation failed:", StringComparison.OrdinalIgnoreCase))
@@ -716,10 +730,10 @@ public class ScriptTools
     }
 
     [McpServerTool(Name = "export_script")]
-    [Description("Exports a stored script to a local file. By default it writes to <name>.cs for code scripts and <name>.txt for instructions scripts.")]
+    [Description("Exports a stored script to a local file. By default it writes to <name>.csx for code scripts and <name>.txt for instructions scripts.")]
     public string ExportScript(
         [Description("The name of the script to export")] string name,
-        [Description("Optional destination path. Defaults to <name>.cs for code scripts or <name>.txt for instructions scripts in the current working directory.")] string path = "")
+        [Description("Optional destination path. Defaults to <name>.csx for code scripts or <name>.txt for instructions scripts in the current working directory.")] string path = "")
     {
         try
         {
@@ -732,7 +746,7 @@ public class ScriptTools
 
             using var readCmd = conn.CreateCommand();
             readCmd.CommandText = @"
-                SELECT script_type, body, description, parameters, output_instructions
+                SELECT script_type, code_format, body, description, parameters, output_instructions
                 FROM scripts
                 WHERE name = @name";
             readCmd.Parameters.AddWithValue("@name", name);
@@ -742,14 +756,15 @@ public class ScriptTools
                 return $"Script '{name}' not found.";
 
             var scriptType = reader.GetString(0);
-            var body = reader.GetString(1);
-            var description = reader.IsDBNull(2) ? "" : reader.GetString(2);
-            var parameters = reader.IsDBNull(3) ? "[]" : reader.GetString(3);
-            var outputInstructions = reader.IsDBNull(4) ? "" : reader.GetString(4);
+            var codeFormat = reader.IsDBNull(1) ? TopLevelCodeFormat : reader.GetString(1);
+            var body = reader.GetString(2);
+            var description = reader.IsDBNull(3) ? "" : reader.GetString(3);
+            var parameters = reader.IsDBNull(4) ? "[]" : reader.GetString(4);
+            var outputInstructions = reader.IsDBNull(5) ? "" : reader.GetString(5);
             reader.Close();
 
             var isCode = !string.Equals(scriptType, "instructions", StringComparison.OrdinalIgnoreCase);
-            var extension = isCode ? ".cs" : ".txt";
+            var extension = isCode ? ".csx" : ".txt";
             var prefix = isCode ? "// " : "";
 
             bool bodyHasMetadata = body.Split('\n')
@@ -770,6 +785,8 @@ public class ScriptTools
                 metaHeader.AppendLine($"{prefix}@scriptmcp name: {name}");
                 metaHeader.AppendLine($"{prefix}@scriptmcp description: {description}");
                 metaHeader.AppendLine($"{prefix}@scriptmcp type: {scriptType}");
+                if (isCode && !string.IsNullOrWhiteSpace(codeFormat))
+                    metaHeader.AppendLine($"{prefix}@scriptmcp code_format: {codeFormat}");
                 metaHeader.AppendLine($"{prefix}@scriptmcp parameters: {parameters}");
                 if (!string.IsNullOrWhiteSpace(outputInstructions))
                     metaHeader.AppendLine($"{prefix}@scriptmcp output_instructions: {outputInstructions}");
@@ -801,7 +818,7 @@ public class ScriptTools
                  "When the update affects execution, the script is recompiled automatically.")]
     public string UpdateScript(
         [Description("The existing script name to update")] string name,
-        [Description("The field/column to update: name, description, parameters, script_type, body, output_instructions, or dependencies")] string field,
+        [Description("The field/column to update: name, description, parameters, script_type, code_format, body, output_instructions, or dependencies")] string field,
         [Description("The new value for that field")] string value)
     {
         using var conn = new SqliteConnection(ConnectionString);
@@ -1038,13 +1055,21 @@ public class ScriptTools
         var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parametersJson, ReadOptions)
                         ?? new List<DynParam>();
 
+        using var formatCmd = conn.CreateCommand();
+        formatCmd.CommandText = "SELECT code_format FROM scripts WHERE name = @name";
+        formatCmd.Parameters.AddWithValue("@name", name);
+        var codeFormatObj = formatCmd.ExecuteScalar();
+        var codeFormat = codeFormatObj == null || codeFormatObj == DBNull.Value
+            ? TopLevelCodeFormat
+            : Convert.ToString(codeFormatObj, CultureInfo.InvariantCulture) ?? TopLevelCodeFormat;
+
         var func = new Script
         {
             Name         = name,
             FunctionType = functionType,
             Body         = body,
             Parameters   = dynParams,
-            CodeFormat   = TopLevelCodeFormat,
+            CodeFormat   = ResolveCodeFormat(functionType, codeFormat),
         };
 
         var compiled = CompileFunction(func);
@@ -1063,7 +1088,7 @@ public class ScriptTools
         updateCmd.CommandText = "UPDATE scripts SET compiled_assembly = @asm, code_format = @code_format, external_refs = @external_refs WHERE name = @name";
         updateCmd.Parameters.AddWithValue("@name", name);
         updateCmd.Parameters.AddWithValue("@asm", compiled.Bytes);
-        updateCmd.Parameters.AddWithValue("@code_format", TopLevelCodeFormat);
+        updateCmd.Parameters.AddWithValue("@code_format", func.CodeFormat);
         updateCmd.Parameters.AddWithValue("@external_refs",
             compiled.ExternalReferencePaths != null && compiled.ExternalReferencePaths.Count > 0
                 ? JsonSerializer.Serialize(compiled.ExternalReferencePaths)
@@ -1088,7 +1113,7 @@ public class ScriptTools
         ConfigureConnection(conn);
 
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT name, description, parameters, script_type, body, compiled_assembly, output_instructions, external_refs FROM scripts WHERE name = @name";
+        cmd.CommandText = "SELECT name, description, parameters, script_type, body, compiled_assembly, output_instructions, external_refs, code_format FROM scripts WHERE name = @name";
         cmd.Parameters.AddWithValue("@name", name);
 
         using var reader = cmd.ExecuteReader();
@@ -1101,6 +1126,7 @@ public class ScriptTools
         var parametersJson = reader.GetString(2);
         var outputInstructions = reader.IsDBNull(6) ? null : reader.GetString(6);
         var externalRefsJson = reader.IsDBNull(7) ? null : reader.GetString(7);
+        var codeFormat = reader.IsDBNull(8) ? TopLevelCodeFormat : reader.GetString(8);
         var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parametersJson, ReadOptions)
                         ?? new List<DynParam>();
         var externalRefs = !string.IsNullOrEmpty(externalRefsJson)
@@ -1114,6 +1140,9 @@ public class ScriptTools
         }
         else
         {
+            if (string.Equals(codeFormat, LibraryCodeFormat, StringComparison.OrdinalIgnoreCase))
+                return $"Script '{name}' is a library code script and cannot be executed directly. Load it from another script with #load.";
+
             // Code function — load compiled assembly
             if (reader.IsDBNull(5))
                 return $"Script '{name}' has no compiled assembly. Re-register it to compile.";
@@ -1126,6 +1155,107 @@ public class ScriptTools
             result += $"\n\n[Output Instructions]: {outputInstructions}";
 
         return result;
+    }
+
+    public void CallScriptStreaming(string name, string arguments = "{}")
+    {
+        using var conn = new SqliteConnection(ConnectionString);
+        conn.Open();
+        ConfigureConnection(conn);
+
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name, parameters, script_type, body, compiled_assembly, external_refs, code_format FROM scripts WHERE name = @name";
+        cmd.Parameters.AddWithValue("@name", name);
+
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read())
+        {
+            Console.Error.WriteLine($"Script '{name}' not found.");
+            return;
+        }
+
+        var functionType = reader.GetString(2);
+        var parametersJson = reader.GetString(1);
+        var externalRefsJson = reader.IsDBNull(5) ? null : reader.GetString(5);
+        var codeFormat = reader.IsDBNull(6) ? TopLevelCodeFormat : reader.GetString(6);
+        var dynParams = JsonSerializer.Deserialize<List<DynParam>>(parametersJson, ReadOptions) ?? new List<DynParam>();
+        var externalRefs = !string.IsNullOrEmpty(externalRefsJson)
+            ? JsonSerializer.Deserialize<List<string>>(externalRefsJson) : null;
+
+        if (string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Write(ExecuteInstructions(reader.GetString(3), dynParams, arguments));
+            return;
+        }
+
+        if (string.Equals(codeFormat, LibraryCodeFormat, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine($"Script '{name}' is a library code script and cannot be executed directly.");
+            Environment.ExitCode = 1;
+            return;
+        }
+
+        if (reader.IsDBNull(4))
+        {
+            Console.Error.WriteLine($"Script '{name}' has no compiled assembly.");
+            return;
+        }
+
+        var assemblyBytes = (byte[])reader[4];
+
+        AssemblyLoadContext? alc = null;
+        try
+        {
+            var rawArguments = NormalizeRawArguments(arguments);
+            var commandLineArgs = BuildTopLevelCommandLineArgs(rawArguments);
+
+            alc = new AssemblyLoadContext(name, isCollectible: true);
+
+            if (externalRefs != null && externalRefs.Count > 0)
+            {
+                alc.Resolving += (context, assemblyName) =>
+                {
+                    foreach (var refPath in externalRefs)
+                    {
+                        if (!File.Exists(refPath)) continue;
+                        try
+                        {
+                            var refName = AssemblyName.GetAssemblyName(refPath);
+                            if (string.Equals(refName.Name, assemblyName.Name, StringComparison.OrdinalIgnoreCase))
+                                return context.LoadFromAssemblyPath(refPath);
+                        }
+                        catch { }
+                    }
+                    return null;
+                };
+            }
+
+            var helperAssembly = alc.LoadFromStream(new MemoryStream(_helperAssembly.Value.bytes));
+            var assembly = alc.LoadFromStream(new MemoryStream(assemblyBytes));
+
+            Environment.SetEnvironmentVariable("SCRIPTMCP_DB", SavePath);
+            SetScriptRuntimeArgs(helperAssembly, rawArguments);
+
+            var entryPoint = assembly.EntryPoint
+                ?? throw new InvalidOperationException("Compiled assembly missing entry point.");
+
+            ExecuteTopLevelAssemblyStreaming(entryPoint, commandLineArgs);
+        }
+        catch (TargetInvocationException ex)
+        {
+            Console.Error.WriteLine($"Script execution failed: {(ex.InnerException ?? ex).Message}");
+            Environment.ExitCode = 1;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Script execution failed: {ex.Message}");
+            Environment.ExitCode = 1;
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SCRIPTMCP_DB", null);
+            alc?.Unload();
+        }
     }
 
     // ── Out-of-process invocation ──────────────────────────────────────────────
@@ -1143,7 +1273,8 @@ public class ScriptTools
         [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}",
         [Description("Output mode: Default (uses --exec, no persisted output file), WriteNew (uses --exec-out, writes a new file per execution), WriteAppend (uses --exec-out-append, appends to one stable file), WriteRewrite (uses --exec-out-rewrite, overwrites one stable file each run)")] string output_mode = "Default",
         [Description("When true, send the script output to a Telegram channel using telegram.json beside the database. Or provide a custom path to telegram.json.")] string telegram = "",
-        [Description("Open output in a visible Windows Terminal window or tab instead of capturing it. Values: 'window' (new WT window each call), 'tabs' (one named WT window, subsequent calls add tabs), 'self' (new tab in the current agent WT window). Leave empty for headless execution.")] string terminal = "")
+        [Description("Open output in a visible Windows Terminal window or tab instead of capturing it. Values: 'window' (new WT window each call), 'tabs' (one named WT window, subsequent calls add tabs), 'self' (new tab in the current agent WT window). Leave empty for headless execution.")] string terminal = "",
+        [Description("Custom title for the terminal window or tab. Defaults to the script name if not specified.")] string title = "")
     {
         if (!string.IsNullOrWhiteSpace(terminal))
         {
@@ -1168,8 +1299,7 @@ public class ScriptTools
 
             var psCmd2 =
                 "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " +
-                $"& '{exeEsc2}' --db '{dbEsc2}' --exec {nameEsc2} '{argsForPS2}' | " +
-                "Where-Object { $_ -notmatch '^\\[Output Instructions\\]' }; " +
+                $"& '{exeEsc2}' --db '{dbEsc2}' --exec-stream {nameEsc2} '{argsForPS2}'; " +
                 "Write-Host ''; " +
                 "Write-Host 'Press any key to close...' -NoNewline; " +
                 "$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')";
@@ -1186,10 +1316,11 @@ public class ScriptTools
 
             try
             {
+                var tabTitle = string.IsNullOrWhiteSpace(title) ? name : title;
                 var psi2 = new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = "wt.exe",
-                    Arguments = $"{wtFlag} new-tab --title \"{name}\" powershell.exe -NoProfile -EncodedCommand {encoded2}",
+                    Arguments = $"{wtFlag} new-tab --title \"{tabTitle}\" powershell.exe -NoProfile -EncodedCommand {encoded2}",
                     UseShellExecute = true,
                 };
                 System.Diagnostics.Process.Start(psi2);
@@ -2057,11 +2188,26 @@ public class ScriptTools
             var resolvedPath = Path.IsPathRooted(loadPath)
                 ? Path.GetFullPath(loadPath)
                 : Path.GetFullPath(Path.Combine(baseDir, loadPath));
+            var hasExplicitExtension = !string.IsNullOrWhiteSpace(Path.GetExtension(loadPath));
 
             string content;
             bool fromDatabase = false;
 
-            if (File.Exists(resolvedPath))
+            if (!hasExplicitExtension)
+            {
+                var scriptName = Path.GetFileName(loadPath);
+                var dbBody = LoadScriptBodyFromDatabase(scriptName);
+                if (dbBody == null)
+                {
+                    return (trees, dllRefs,
+                        $"#load directive error: script '{scriptName}' was not found in the active database. " +
+                        "Extensionless #load targets are resolved from the database; verify that you are using the correct database.");
+                }
+
+                content = dbBody;
+                fromDatabase = true;
+            }
+            else if (File.Exists(resolvedPath))
             {
                 content = File.ReadAllText(resolvedPath);
             }
@@ -2168,6 +2314,7 @@ public class ScriptTools
     private static CompilationOutcome CompileFunction(Script func)
     {
         var userSource = func.Body ?? string.Empty;
+        var isLibrary = IsLibraryCode(func);
 
         // Phase 1: Preprocess directives
         var preprocessed = PreprocessDirectives(userSource);
@@ -2191,9 +2338,12 @@ public class ScriptTools
         }
 
         // Add support source and user source trees
-        var supportSource = BuildTopLevelSupportSource(func.Parameters);
-        syntaxTreeList.Add(CSharpSyntaxTree.ParseText(supportSource, path: "__ScriptMcpSupport.cs"));
-        syntaxTreeList.Add(CSharpSyntaxTree.ParseText(preprocessed.CleanedBody, path: $"{func.Name}.cs"));
+        if (!isLibrary)
+        {
+            var supportSource = BuildTopLevelSupportSource(func.Parameters);
+            syntaxTreeList.Add(CSharpSyntaxTree.ParseText(supportSource, path: "__ScriptMcpSupport.cs"));
+        }
+        syntaxTreeList.Add(CSharpSyntaxTree.ParseText(preprocessed.CleanedBody, path: $"{func.Name}.csx"));
 
         // Phase 3: Resolve #r "path.dll" references
         var references = GatherMetadataReferences();
@@ -2214,7 +2364,7 @@ public class ScriptTools
             assemblyName: $"Script_{func.Name}_{Guid.NewGuid():N}",
             syntaxTrees: syntaxTreeList,
             references: references,
-            options: new CSharpCompilationOptions(OutputKind.ConsoleApplication)
+            options: new CSharpCompilationOptions(isLibrary ? OutputKind.DynamicallyLinkedLibrary : OutputKind.ConsoleApplication)
                 .WithOptimizationLevel(OptimizationLevel.Release));
 
         using var peStream = new MemoryStream();
@@ -2778,6 +2928,20 @@ public class ScriptTools
         }
     }
 
+    private static void ExecuteTopLevelAssemblyStreaming(MethodInfo entryPoint, string[] commandLineArgs)
+    {
+        lock (_consoleRedirectLock)
+        {
+            var parameters = entryPoint.GetParameters();
+            object? invocationResult = parameters.Length == 0
+                ? entryPoint.Invoke(null, null)
+                : entryPoint.Invoke(null, new object?[] { commandLineArgs });
+
+            if (invocationResult is System.Threading.Tasks.Task task)
+                task.GetAwaiter().GetResult();
+        }
+    }
+
     private static string ExecuteInstructions(string body, List<DynParam> dynParams, string arguments)
     {
         try
@@ -2804,6 +2968,28 @@ public class ScriptTools
     private static bool IsInstructions(Script f) =>
         string.Equals(f.FunctionType, "instructions", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsLibraryCode(Script f) =>
+        string.Equals(f.FunctionType, "code", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(f.CodeFormat, LibraryCodeFormat, StringComparison.OrdinalIgnoreCase);
+
+    private static string ResolveCodeFormat(string? functionType, string? requestedCodeFormat)
+    {
+        if (string.Equals(functionType, "instructions", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        var normalized = string.IsNullOrWhiteSpace(requestedCodeFormat)
+            ? TopLevelCodeFormat
+            : requestedCodeFormat.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            TopLevelCodeFormat => TopLevelCodeFormat,
+            LibraryCodeFormat => LibraryCodeFormat,
+            "" => TopLevelCodeFormat,
+            _ => throw new ArgumentException("code_format must be 'top_level' or 'library' for code scripts."),
+        };
+    }
+
     private static void ValidateScriptName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -2828,12 +3014,14 @@ public class ScriptTools
             "scripttype" => "script_type",
             "function_type" => "script_type",   // backward compat
             "functiontype" => "script_type",    // backward compat
+            "code_format" => "code_format",
+            "codeformat" => "code_format",
             "body" => "body",
             "output_instructions" => "output_instructions",
             "outputinstructions" => "output_instructions",
             "dependencies" => "dependencies",
             _ => throw new ArgumentException(
-                "field must be one of: name, description, parameters, script_type, body, output_instructions, dependencies."),
+                "field must be one of: name, description, parameters, script_type, code_format, body, output_instructions, dependencies."),
         };
     }
 
@@ -2863,9 +3051,11 @@ public class ScriptTools
                     throw new ArgumentException("script_type must be 'code' or 'instructions'.");
                 }
                 func.FunctionType = scriptType;
-                func.CodeFormat = string.Equals(scriptType, "code", StringComparison.OrdinalIgnoreCase)
-                    ? TopLevelCodeFormat
-                    : null;
+                func.CodeFormat = ResolveCodeFormat(scriptType, func.CodeFormat);
+                break;
+
+            case "code_format":
+                func.CodeFormat = ResolveCodeFormat(func.FunctionType, value);
                 break;
 
             case "body":
@@ -2882,7 +3072,7 @@ public class ScriptTools
 
             default:
                 throw new ArgumentException(
-                    "field must be one of: name, description, parameters, script_type, body, output_instructions, dependencies.");
+                    "field must be one of: name, description, parameters, script_type, code_format, body, output_instructions, dependencies.");
         }
     }
 
@@ -2914,7 +3104,7 @@ public class ScriptTools
     }
 
     private static readonly Regex ScriptMetadataLineRegex = new(
-        @"^(?://\s*)?@scriptmcp\s+(version|name|description|type|parameters|output_instructions):\s*(.+)$",
+        @"^(?://\s*)?@scriptmcp\s+(version|name|description|type|code_format|parameters|output_instructions):\s*(.+)$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static (Dictionary<string, string> metadata, string body) ParseScriptMetadataHeader(string content)
