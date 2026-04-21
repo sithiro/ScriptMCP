@@ -395,29 +395,29 @@ Call `read_scheduled_task` directly to read the result written for a script by s
 
 | `terminal` value | Behavior | Use when user says |
 |---|---|---|
-| `"window"` | New WT window for every call | "in a new window" |
-| `"tabs"` | One named WT window, subsequent calls add tabs | "in the scriptmcp window" |
-| `"self"` | New tab in the current agent WT window | "in a new tab" / "in my terminal" |
+| `"new_window"` | New WT window for every call | "in a new window" |
+| `"named_window"` | One named WT window, subsequent calls add tabs | "in the scriptmcp window" |
+| `"new_tab"` | New tab in the current agent WT window | "in a new tab" |
 | _(empty)_ | Headless — output captured and returned to agent | _(default)_ |
 
 **Show a watchlist in a new window (agent sees no data):**
 
 ```
-call_process(name="watchlist_show", arguments={"name":"tech"}, terminal="window")
+call_process(name="watchlist_show", arguments={"name":"tech"}, terminal="new_window")
 ```
 
 **Show correlation matrix in agent's own tab:**
 
 ```
-call_process(name="watchlist_correlation_matrix", arguments={"showMatrix":true}, terminal="self")
+call_process(name="watchlist_correlation_matrix", arguments={"showMatrix":true}, terminal="new_tab")
 ```
 
 **Open three symbols in parallel tabs:**
 
 ```
-call_process(name="watchlist_show", arguments={"symbols":"AMD"}, terminal="tabs")
-call_process(name="watchlist_show", arguments={"symbols":"TSLA"}, terminal="tabs")   // parallel
-call_process(name="watchlist_show", arguments={"symbols":"ABTC"}, terminal="tabs")   // parallel
+call_process(name="watchlist_show", arguments={"symbols":"AMD"}, terminal="named_window")
+call_process(name="watchlist_show", arguments={"symbols":"TSLA"}, terminal="named_window")   // parallel
+call_process(name="watchlist_show", arguments={"symbols":"ABTC"}, terminal="named_window")   // parallel
 ```
 
 When `terminal` is set, `call_process` returns immediately with no output. Do not wait for or relay any result.
