@@ -169,7 +169,7 @@ public static class McpConstants
         "When the user asks to send a script's output to Telegram (outside of scheduled tasks), use call_process with the telegram parameter set to \"true\" (for the default telegram.json beside the database) or to a custom path. This applies to any one-off execution where the user wants the result delivered to Telegram. " +
         "TERMINAL DISPLAY: call_process supports a terminal parameter that opens script output in a visible Windows Terminal window or tab instead of capturing it. " +
         "Use terminal=\"new_window\" when the user says 'in a new window' — opens a brand-new WT window for every call. " +
-        "Use terminal=\"named_window\" when the user says 'in the scriptmcp window' — reuses one named WT window and adds a tab for each call. " +
+        "Use terminal=\"named_window\" when the user references a named window — reuses that WT window and adds a tab; use window_name to specify which window (defaults to 'scriptmcp'). " +
         "Use terminal=\"new_tab\" when the user says 'in a new tab' — opens a new tab inside the current agent WT window. " +
         "When terminal is set, call_process returns no output — the script runs and displays in the terminal only. " +
         "Leave terminal empty (default) for headless execution where output is captured and returned to the agent. " +

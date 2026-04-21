@@ -29,7 +29,7 @@ Ask whether the user wants the output sent to Telegram:
 
 If the user asks to display output in a visible terminal window or tab, set the `terminal` parameter:
 - `terminal: "new_window"` — new Windows Terminal window for every call (user says "in a new window")
-- `terminal: "named_window"` — one named WT window, subsequent calls add tabs (user says "in the scriptmcp window")
+- `terminal: "named_window"` — one named WT window, subsequent calls add tabs; set `window_name` to target a specific window (defaults to `"scriptmcp"`)
 - `terminal: "new_tab"` — new tab in the current agent WT window (user says "in a new tab")
 - If not specified, omit the parameter (headless execution, output captured and returned).
 
