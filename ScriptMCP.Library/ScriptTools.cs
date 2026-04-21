@@ -2655,7 +2655,7 @@ public class ScriptTools
                     psi.ArgumentList.Add("--db");
                     psi.ArgumentList.Add(dbPath);
                 }
-                psi.ArgumentList.Add("--exec");
+                psi.ArgumentList.Add("--exec-stream");
                 psi.ArgumentList.Add(functionName);
                 psi.ArgumentList.Add(arguments);
                 return psi;
