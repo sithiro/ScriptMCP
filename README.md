@@ -227,6 +227,12 @@ Download the `.mcpb` file for your platform from the [latest release](https://gi
 
 Open the `.mcpb` file in Claude Desktop to install the ScriptMCP extension. This provides the MCP server and all 21 tools.
 
+> **macOS:** ScriptMCP is not a notarized application. After installing the extension, macOS will block it from running. Open a terminal and run:
+> ```bash
+> codesign --force --deep --sign - "$HOME/Library/Application Support/Claude/Claude Extensions/local.mcb.bill-sithiro.scriptmcp/server/scriptmcp"
+> ```
+> Then restart Claude Desktop.
+
 ![ScriptMCP Extension Install](snapshot5.png)
 
 #### b) Plugin (slash commands, skills, hooks)

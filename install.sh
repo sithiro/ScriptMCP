@@ -67,9 +67,9 @@ rm -rf "$INSTALL_DIR/server" "$INSTALL_DIR/manifest.json" 2>/dev/null || true
 # Make executable
 chmod +x "$INSTALL_DIR/$BINARY"
 
-# macOS: remove quarantine attribute
+# macOS: ad-hoc sign to satisfy Gatekeeper (binary is not notarized)
 if [ "$OS" = "Darwin" ]; then
-  xattr -d com.apple.quarantine "$INSTALL_DIR/$BINARY" 2>/dev/null || true
+  codesign --force --deep --sign - "$INSTALL_DIR/$BINARY" 2>/dev/null || true
 fi
 
 BINARY_PATH="$(cd "$INSTALL_DIR" && pwd)/$BINARY"
