@@ -1226,6 +1226,20 @@ public class ScriptTools
                         }
                         catch { }
                     }
+
+                    var candidateDirectories = externalRefs
+                        .Select(Path.GetDirectoryName)
+                        .Where(static dir => !string.IsNullOrWhiteSpace(dir))
+                        .Distinct(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var dir in candidateDirectories)
+                    {
+                        var candidatePath = Path.Combine(dir!, assemblyName.Name + ".dll");
+                        if (!File.Exists(candidatePath)) continue;
+                        try { return context.LoadFromAssemblyPath(candidatePath); }
+                        catch { }
+                    }
+
                     return null;
                 };
             }
@@ -1266,17 +1280,21 @@ public class ScriptTools
                  "Set terminal to display output in a visible Windows Terminal window or tab (Windows only): " +
                  "'new_window' opens a brand-new WT window for every call (use when user says 'in a new window'); " +
                  "'named_window' reuses one named WT window and adds a tab for each call — use window_name to target a specific named window, defaults to 'scriptmcp'; " +
-                 "'new_tab' opens a new tab inside the current agent WT window (use when user says 'in a new tab'). " +
+                 "'new_tab' opens a new tab inside the current agent WT window (use when user says 'in a new tab'); " +
+                 "'here' keeps output in the current agent session and is equivalent to leaving terminal empty. " +
                  "Leave terminal empty for headless execution where output is captured and returned.")]
     public string CallProcess(
         [Description("The name of the script to call")] string name,
         [Description("JSON object of argument values, e.g. {\"x\": 5}")] string arguments = "{}",
         [Description("Output mode: Default (uses --exec, no persisted output file), WriteNew (uses --exec-out, writes a new file per execution), WriteAppend (uses --exec-out-append, appends to one stable file), WriteRewrite (uses --exec-out-rewrite, overwrites one stable file each run)")] string output_mode = "Default",
         [Description("When true, send the script output to a Telegram channel using telegram.json beside the database. Or provide a custom path to telegram.json.")] string telegram = "",
-        [Description("Open output in a visible Windows Terminal window or tab instead of capturing it. Values: 'new_window' (new WT window each call), 'named_window' (one named WT window, subsequent calls add tabs), 'new_tab' (new tab in the current agent WT window). Leave empty for headless execution.")] string terminal = "",
+        [Description("Open output in a visible Windows Terminal window or tab instead of capturing it. Values: 'new_window' (new WT window each call), 'named_window' (one named WT window, subsequent calls add tabs), 'new_tab' (new tab in the current agent WT window), 'here' (return output to the current agent session). Leave empty for headless execution.")] string terminal = "",
         [Description("Custom title for the tab. Defaults to the script name if not specified.")] string title = "",
         [Description("Window name for named_window mode. Defaults to 'scriptmcp' if not specified.")] string window_name = "")
     {
+        if (string.Equals(terminal?.Trim(), "here", StringComparison.OrdinalIgnoreCase))
+            terminal = "";
+
         if (!string.IsNullOrWhiteSpace(terminal))
         {
             if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
@@ -1312,7 +1330,7 @@ public class ScriptTools
                 case "new_window":    wtFlag = "-w new";        break;
                 case "named_window":  wtFlag = $"-w {(string.IsNullOrWhiteSpace(window_name) ? "scriptmcp" : window_name)}"; break;
                 case "new_tab":       wtFlag = "-w 0";          break;
-                default: return $"Error: invalid terminal value '{terminal}'. Supported: new_window, named_window, new_tab.";
+                default: return $"Error: invalid terminal value '{terminal}'. Supported: new_window, named_window, new_tab, here.";
             }
 
             try
