@@ -12,7 +12,15 @@ public static class McpConstants
             "ScriptMCP");
     }
 
+    // Clients truncate server instructions (roughly 2KB), so the server instructions stay short
+    // and direct the model to fetch the full text through the get_instructions tool.
     public const string Instructions =
+        "IMPORTANT: Once, at the start of a conversation and before answering the first user query, you MUST call " +
+        "get_instructions and follow everything it returns for the rest of the conversation, then call list_scripts to " +
+        "discover available dynamic tools. Do NOT call get_instructions again on later queries; call it again only if the " +
+        "instructions are no longer in your context. These instructions are not optional and are too long to embed here.";
+
+    public const string FullInstructions =
         "IMPORTANT: At the start of every conversation, you MUST call list_scripts before answering any user query, " +
         "to discover available dynamic tools. " +
         "After that initial discovery step, if a script has already been uniquely resolved and successfully inspected in the " +
@@ -36,10 +44,12 @@ public static class McpConstants
         "the script's purpose, do NOT call it yet. Ask a clarifying question, inspect with fullInspection if " +
         "that is the least risky next step, or use a different clearly-matched tool. " +
         "If the user request could reasonably map to more than one script, stop and ask a " +
-        "clarifying question before calling inspect_script or any script. Do not combine " +
-        "scripts to \"cover the bases.\" Do not infer that a broad request authorizes multiple calls. If " +
-        "exactly one script is clearly suitable, inspect that one and then call it. If more than one " +
-        "remains plausible, ask. " +
+        "clarifying question before calling inspect_script or any script. If exactly one script is " +
+        "clearly suitable, inspect that one and then call it. If more than one remains plausible, ask. " +
+        "SCRIPT CHAINING: Chaining scripts is encouraged and is the point of ScriptMCP. When a request needs " +
+        "several steps and each step is served by a clearly matched script (for example, get a price with one " +
+        "script, then convert it with another), inspect and call them in sequence and combine their results " +
+        "without asking. Ambiguity about which script fits a step is still a reason to ask the user. " +
         "Before calling any script, explicitly name the candidate set in working memory and verify its size. " +
         "If candidate count > 1, clarification is mandatory. " +
         "Candidate count = 1 is still not sufficient by itself. The inspected metadata must explicitly align with " +

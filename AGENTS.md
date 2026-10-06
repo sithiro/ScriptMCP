@@ -21,10 +21,12 @@ If the inspection output is vague, jokey, generic, misleading, or otherwise does
 the script's purpose, do NOT call it yet. Ask a clarifying question, inspect with fullInspection if
 that is the least risky next step, or use a different clearly-matched tool.
 If the user request could reasonably map to more than one script, stop and ask a
-clarifying question before calling inspect_script or any script. Do not combine
-scripts to "cover the bases." Do not infer that a broad request authorizes multiple calls. If
-exactly one script is clearly suitable, inspect that one and then call it. If more than one
-remains plausible, ask.
+clarifying question before calling inspect_script or any script. If exactly one script is
+clearly suitable, inspect that one and then call it. If more than one remains plausible, ask.
+SCRIPT CHAINING: Chaining scripts is encouraged and is the point of ScriptMCP. When a request needs
+several steps and each step is served by a clearly matched script (for example, get a price with one
+script, then convert it with another), inspect and call them in sequence and combine their results
+without asking. Ambiguity about which script fits a step is still a reason to ask the user.
 Before calling any script, explicitly name the candidate set in working memory and verify its size.
 If candidate count > 1, clarification is mandatory.
 Candidate count = 1 is still not sufficient by itself. The inspected metadata must explicitly align with

@@ -3316,6 +3316,13 @@ public class ScriptTools
         McpConstants.GetDefaultDatabaseDirectory(),
         McpConstants.DefaultDatabaseFileName);
 
+    [McpServerTool(Name = "get_instructions")]
+    [Description("Returns the full ScriptMCP usage instructions. Call this once at the start of a conversation, not on every query, and follow the returned instructions for the rest of the conversation.")]
+    public string GetInstructions()
+    {
+        return McpConstants.FullInstructions;
+    }
+
     [McpServerTool(Name = "get_database")]
     [Description("Returns the path of the currently active ScriptMCP database.")]
     public string GetDatabase()
