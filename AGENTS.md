@@ -1,8 +1,8 @@
 IMPORTANT: At the start of every conversation, you MUST call list_scripts before answering any user query,
 to discover available dynamic tools.
 After that initial discovery step, if a script has already been uniquely resolved and successfully inspected in the
-current conversation, and the user's follow-up clearly refers to that same script, do NOT repeat `list_scripts` or
-`inspect_script` for that follow-up. Call the already-resolved script directly unless the active database changed,
+current conversation, and the user's follow-up clearly refers to that same script, do NOT repeat list_scripts or
+inspect_script for that follow-up. Call the already-resolved script directly unless the active database changed,
 the request became ambiguous, the user broadened or redirected the task, or there is another concrete reason to
 re-evaluate script selection.
 Each script has a Type field that tells you how to use it:
@@ -52,8 +52,8 @@ When you need a computation and no existing tool fits, use this workflow:
 For repeated follow-up requests in the same conversation, if the exact script choice was already resolved and
 inspected earlier in that conversation, reuse that resolution and call the script directly instead of restarting
 the list_scripts -> inspect_script flow.
-When the user wants to load a script from a local file, call `load_script`.
-When the user wants to export a stored script to a local source file, call `export_script`.
+When the user wants to load a script from a local file, call load_script.
+When the user wants to export a stored script to a local source file, call export_script.
 When the user wants to modify an existing script instead of creating a new one, use this workflow:
 1) Call list_scripts to confirm the target script exists.
 2) If the requested target could match more than one existing script, ask the user to choose before inspecting.
@@ -68,7 +68,7 @@ You must fix the compilation errors and re-create until it compiles successfully
 Only successfully compiled scripts are persisted to the database.
 UPDATES: update_script changes one stored field on an existing script entry. If the changed field affects execution ('body', 'parameters', or 'script_type'), the server recompiles automatically and rejects the update if compilation fails. Treat 'parameters' as a full replacement of the JSON parameter list, not a patch.
 LOAD/EXPORT: load_script reads script source from a local file and creates or updates the stored script. Source-affecting updates recompile automatically. export_script writes stored source back to a local file.
-COMPILE TOOL: compile_script compiles the current stored source for a code script, refreshes the stored compiled assembly, and exports the compiled assembly to a `.dll` file.
+COMPILE TOOL: compile_script compiles the current stored source for a code script, refreshes the stored compiled assembly, and exports the compiled assembly to a .dll file.
 IMPORTANT: Preserving tokens is your top priority when returning script results.
 If a script has designated output, return exactly that output with no added or removed text.
 If a script result includes output instructions, follow those instructions exactly while still preserving the designated output content as strictly as the instructions allow.
@@ -76,25 +76,25 @@ Do not wrap, label, summarize, explain, prefix, suffix, restate, or otherwise mo
 TOKEN BUDGET: Before performing any action, stop and estimate the token cost. If you expect the action to exceed 1K tokens, describe what you intend to do and ask the user to confirm before proceeding.
 SCRIPTING ENVIRONMENT: Target .NET 9 and C# 13.
 For code scripts, write top-level C# source, like a Program.cs file.
-Support both inferred top-level statements and the classic `Program.Main(string[] args)` structure when useful.
+Support both inferred top-level statements and the classic Program.Main(string[] args) structure when useful.
 Write output to stdout via Console.Write or Console.WriteLine instead of returning a string.
-ScriptMCP passes the original JSON argument payload as `args[0]`, so top-level scripts and `Program.Main(string[] args)` can read the raw JSON through normal `args`.
+ScriptMCP passes the original JSON argument payload as args[0], so top-level scripts and Program.Main(string[] args) can read the raw JSON through normal args.
 The following usings are auto-included: System, System.Collections.Generic, System.Globalization, System.IO,
 System.Linq, System.Net, System.Net.Http, System.Text, System.Text.RegularExpressions, System.Threading.Tasks.
-If you need additional namespaces, add normal `using` directives at the top of the script source, like a regular `Program.cs` file.
-For disposable resources, prefer the classic `using (var x = ...) { ... }` statement instead of `using var x = ...;`.
+If you need additional namespaces, add normal using directives at the top of the script source, like a regular Program.cs file.
+For disposable resources, prefer the classic using (var x = ...) { ... } statement instead of using var x = ...;.
 Available assembly references: all System.*.dll from the .NET 9 runtime directory.
 NOT available: NuGet packages (ScriptMCP is self-contained, no .NET SDK dependency).
 Use System.Text.Json for JSON. Use System.Net.Http.HttpClient for HTTP. Use System.Diagnostics.Process for shell commands.
-DIRECTIVES: Scripts support `#r "path.dll"` to reference external .NET assemblies and `#load "path.csx"` to include C# source files.
+DIRECTIVES: Scripts support #r "path.dll" to reference external .NET assemblies and #load "path.csx" to include C# source files.
 Directives must appear at the top of the script body before any code. Both absolute and relative paths are supported.
-`#load` files become separate compilation units — code must be in classes/structs, not bare top-level statements.
-Loaded files can contain nested `#r` and `#load` directives (max depth 10, circular references detected).
-`#r "nuget: ..."` is not supported.
+#load files become separate compilation units — code must be in classes/structs, not bare top-level statements.
+Loaded files can contain nested #r and #load directives (max depth 10, circular references detected).
+#r "nuget: ..." is not supported.
 The generated entry point is not async-friendly by default — use .Result or .GetAwaiter().GetResult() for async calls.
 Supported parameter types: string (default), int, long, double, float, bool.
 Parameters are auto-parsed from that JSON payload and exposed as typed parameter names in your code.
-`scriptArgs` remains available as a compatibility dictionary parsed from the same `args[0]` JSON.
+scriptArgs remains available as a compatibility dictionary parsed from the same args[0] JSON.
 INTER-SCRIPT CALLS: Two helpers are available inside code scripts to call other scripts.
 ScriptMCP.Call(scriptName, argsJson) — runs a script synchronously and returns its output string.
 ScriptMCP.Proc(scriptName, argsJson) — launches a script as a subprocess and returns a System.Diagnostics.Process
@@ -111,41 +111,40 @@ If fullInspection is true, return the full inspection including source code and 
 If fullInspection is false or omitted, return everything except source code and compiled status.
 NATIVE TOOLS: In addition to the script tools above, ScriptMCP provides these built-in native tools:
 - get_database: Returns the path of the currently active ScriptMCP database.
-  Use this when the user asks which database is active or where scripts are currently being stored.
-  Parameter: none.
+Use this when the user asks which database is active or where scripts are currently being stored.
+Parameter: none.
 - set_database: Switches the active ScriptMCP database at runtime.
-  Parameters: path (string, optional), create (bool, default false).
-  If path is omitted, it switches to the default database.
-  If path is only a file name with no directory separators, resolve it relative to the default ScriptMCP data directory.
-  If the target database does not exist, do not create it implicitly — ask the user for confirmation and call set_database again with create=true only after they confirm.
+Parameters: path (string, optional), create (bool, default false).
+If path is omitted, it switches to the default database.
+If path is only a file name with no directory separators, resolve it relative to the default ScriptMCP data directory.
+If the target database does not exist, do not create it implicitly — ask the user for confirmation and call set_database again with create=true only after they confirm.
 - delete_database: Deletes a ScriptMCP database file.
-  Parameters: path (string, required), confirm (bool, default false).
-  First call it with confirm=false so it can verify that the database exists, reject attempts to delete the default database, and return a yes-or-no confirmation prompt. Only call it again with confirm=true after the user says yes. If the target database is currently active, ScriptMCP will switch to the default database first.
+Parameters: path (string, required), confirm (bool, default false).
+First call it with confirm=false so it can verify that the database exists, reject attempts to delete the default database, and return a yes-or-no confirmation prompt. Only call it again with confirm=true after the user says yes. If the target database is currently active, ScriptMCP will switch to the default database first.
 - search_scripts: Searches all stored scripts for a text string or regex pattern.
-  Parameters: query (string, required), searchIn (string, default "source"), regex (bool, default false).
-  searchIn values: source (line-by-line body search, default), name, description, parameters, scripttype, codeformat, outputinstructions, dependson, externalrefs, all.
-  Returns each match as 'scriptname: matching line' for source searches, or 'scriptname [fieldname]: value' for metadata searches.
-- read_scheduled_task: Reads the most recent scheduled-task output file for a specific script from the `output`
-  directory beside the database.
-  If <script>.txt exists from append mode, that file is returned; otherwise the latest timestamped file is returned.
-  Parameter: function_name (string, required).
+Parameters: query (string, required), searchIn (string, default "source"), regex (bool, default false).
+searchIn values: source (line-by-line body search, default), name, description, parameters, scripttype, codeformat, outputinstructions, dependson, externalrefs, all.
+Returns each match as 'scriptname: matching line' for source searches, or 'scriptname [fieldname]: value' for metadata searches.
+- read_scheduled_task: Reads the most recent scheduled-task output file for a specific script from the output directory beside the database.
+If <script>.txt exists from append mode, that file is returned; otherwise the latest timestamped file is returned.
+Parameter: function_name (string, required).
 - create_scheduled_task: Creates a scheduled task that runs a script at a recurring interval.
-  On Windows, uses Task Scheduler (schtasks) and runs `scriptmcp.exe` directly. On Linux/macOS, uses cron.
-  Parameters: function_name (string, required), function_args (string, default "{}"), interval_minutes (int, required), append (bool, default false), rewrite (bool, default false), no_file (bool, default false), telegram (string, default ""). Set no_file=true to use --exec instead of --exec-out (no file output), useful with telegram for notification-only tasks. Set telegram to "true" to use the default telegram.json beside the database, or provide a custom path to telegram.json.
-  The task runs via --exec-out. By default it writes each execution result to a timestamped file in `output`; with append=true it uses --exec-out-append and appends to `<script>.txt`; with rewrite=true it uses --exec-out-rewrite and overwrites `<script>.txt` each run. rewrite takes precedence over append.
-  If the user wants a single output file reused across runs, set append=true (to accumulate) or rewrite=true (to keep only the latest result) during task creation.
-  After creation, the task is immediately run once.
+On Windows, uses Task Scheduler (schtasks) and runs scriptmcp.exe directly. On Linux/macOS, uses cron.
+Parameters: function_name (string, required), function_args (string, default "{}"), interval_minutes (int, required), append (bool, default false), rewrite (bool, default false), no_file (bool, default false), telegram (string, default ""). Set no_file=true to use --exec instead of --exec-out (no file output), useful with telegram for notification-only tasks. Set telegram to "true" to use the default telegram.json beside the database, or provide a custom path to telegram.json.
+The task runs via --exec-out. By default it writes each execution result to a timestamped file in output; with append=true it uses --exec-out-append and appends to <script>.txt; with rewrite=true it uses --exec-out-rewrite and overwrites <script>.txt each run. rewrite takes precedence over append.
+If the user wants a single output file reused across runs, set append=true (to accumulate) or rewrite=true (to keep only the latest result) during task creation.
+After creation, the task is immediately run once.
 - delete_scheduled_task: Deletes a scheduled task created for a script.
-  On Windows, deletes `ScriptMCP\<script> (<interval>m)` via `schtasks`. On Linux/macOS, removes the cron entry tagged `# ScriptMCP:<function_name>`.
-  Parameters: function_name (string, required), interval_minutes (int, default 1).
+On Windows, deletes ScriptMCP\<script> (<interval>m) via schtasks. On Linux/macOS, removes the cron entry tagged # ScriptMCP:<function_name>.
+Parameters: function_name (string, required), interval_minutes (int, default 1).
 - list_scheduled_tasks: Lists ScriptMCP scheduled tasks.
-  On Windows, reads tasks from Task Scheduler under `\ScriptMCP\`. On Linux/macOS, lists cron entries tagged `# ScriptMCP:`.
+On Windows, reads tasks from Task Scheduler under \ScriptMCP\. On Linux/macOS, lists cron entries tagged # ScriptMCP:.
 - start_scheduled_task: Starts or enables a scheduled task.
-  On Windows, enables `ScriptMCP\<script> (<interval>m)` and runs it immediately. On Linux/macOS, cron entries are either present or absent, so this reports the current limitation.
-  Parameters: function_name (string, required), interval_minutes (int, default 1).
+On Windows, enables ScriptMCP\<script> (<interval>m) and runs it immediately. On Linux/macOS, cron entries are either present or absent, so this reports the current limitation.
+Parameters: function_name (string, required), interval_minutes (int, default 1).
 - stop_scheduled_task: Stops or disables a scheduled task.
-  On Windows, disables `ScriptMCP\<script> (<interval>m)`. On Linux/macOS, cron entries are either present or absent, so this reports that deletion is required instead.
-  Parameters: function_name (string, required), interval_minutes (int, default 1).
+On Windows, disables ScriptMCP\<script> (<interval>m). On Linux/macOS, cron entries are either present or absent, so this reports that deletion is required instead.
+Parameters: function_name (string, required), interval_minutes (int, default 1).
 These are native MCP tools — they do not appear in list_scripts and do not need inspection before use.
 Call them directly when the user asks to inspect the active database, switch databases, create a database via set_database, delete a database, search script source or metadata, schedule a script, list tasks, start or stop a task, delete a scheduled task, or read previous execution output.
 TELEGRAM NOTIFICATIONS: The CLI supports --telegram [filepath] to send script output to a Telegram channel.
@@ -156,13 +155,14 @@ Messages over 4096 characters are automatically split into chunks.
 If the config file is missing or the Telegram API fails, a warning is written to stderr but the process does not fail.
 When the user asks to send a script's output to Telegram (outside of scheduled tasks), use call_process with the telegram parameter set to "true" (for the default telegram.json beside the database) or to a custom path. This applies to any one-off execution where the user wants the result delivered to Telegram.
 TERMINAL DISPLAY: call_process supports a terminal parameter that opens script output in a visible Windows Terminal window or tab instead of capturing it.
-Use terminal="window" when the user says 'in a new window' — opens a brand-new WT window for every call.
-Use terminal="tabs" when the user says 'in the scriptmcp window' — reuses one named WT window and adds a tab for each call.
-Use terminal="self" when the user says 'in a new tab', 'in my terminal', or 'in my window' — opens a new tab inside the current agent WT window.
+Use terminal="new_window" when the user says 'in a new window' — opens a brand-new WT window for every call.
+Use terminal="named_window" when the user references a named window — reuses that WT window and adds a tab; use window_name to specify which window (defaults to 'scriptmcp').
+Use terminal="new_tab" when the user says 'in a new tab' — opens a new tab inside the current agent WT window.
 When terminal is set, call_process returns no output — the script runs and displays in the terminal only.
 Leave terminal empty (default) for headless execution where output is captured and returned to the agent.
-TOKEN SAVINGS: terminal mode is a major token saver. When the user wants to see a script's output (tables, reports, market data, watchlists, etc.) but the agent does not need to read or act on it, always prefer terminal mode. The output goes directly to the user's terminal window — the agent never sees the data, saving hundreds to thousands of tokens per call.
-Examples:
-  call_process(name="watchlist_show", arguments={"name":"tech"}, terminal="window") — shows a watchlist in a new window, agent sees no output.
-  call_process(name="watchlist_correlation_matrix", arguments={"showMatrix":true}, terminal="self") — shows matrix in agent's tab, agent sees no data.
-  Three parallel calls with terminal="tabs" open 3 tabs in the named window simultaneously.
+TOKEN SAVINGS: terminal mode is a major token saver. When the user wants to see a script's output (tables, reports, market data, watchlists, etc.)
+but the agent does not need to read or act on it, always prefer terminal mode.
+The output goes directly to the user's terminal window — the agent never sees the data, saving hundreds to thousands of tokens per call.
+Examples: call_process(name="watchlist_show", arguments="{\"name\":\"tech\"}", terminal="new_window") — shows a watchlist in a new window without returning data to the agent.
+call_process(name="watchlist_correlation_matrix", arguments="{\"showMatrix\":true}", terminal="new_tab") — shows the correlation matrix in the agent's tab without returning data.
+Multiple parallel calls: call_process(name="watchlist_show", arguments="{\"symbols\":\"AMD,TSLA\"}", terminal="named_window") × 3 opens 3 tabs in the named window simultaneously.
